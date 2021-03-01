@@ -1,0 +1,6 @@
+epochs: 20
+batch_size: 42
+
+features:
+  constituents: [JetPFCands_pt, PFCands_mass, PFCands_eta]
+  globals: [Jet_pt, GenJet_pt]
