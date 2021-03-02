@@ -5,7 +5,7 @@ import tensorflow as tf
 import yaml
 from model import get_model
 from plotter import plot_loss
-from data import create_dataset
+from data import create_datasets
 
 
 if __name__ == '__main__':
@@ -16,12 +16,19 @@ if __name__ == '__main__':
     with open('config.yaml') as f:
         config = yaml.safe_load(f)
 
-    dataset = create_dataset(features=config['features'], batch_size=config['batch_size'])
+    train, test, validation = create_datasets(
+        features=config['features'], batch_size=config['batch_size'],
+        train_size=config['train_size'], test_size=config['test_size']
+    )
+
+    train = train.shuffle(100)
 
     dnn = get_model(num_features=len(config['features']['constituents']))
 
     dnn.compile(optimizer='adam', loss='mean_absolute_error')
 
-    fit = dnn.fit(dataset, epochs=config['epochs'])
+    fit = dnn.fit(train, validation_data=validation, epochs=config['epochs'])
 
     plot_loss(fit.history)
+
+    predictions = dnn.predict(test)

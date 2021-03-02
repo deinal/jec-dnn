@@ -1,6 +1,18 @@
 epochs: 20
 batch_size: 42
+train_size: 0.6
+validation_size: 0.2
+test_size: 0.2
 
 features:
-  constituents: [JetPFCands_pt, PFCands_mass, PFCands_eta]
+  constituents: [
+    JetPFCands_pt, JetPFCands_jetIdx, JetPFCands_pFCandsIdx, 
+    JetPFCands_btagEtaRel, JetPFCands_btagJetDistVal, JetPFCands_btagPParRatio,
+    JetPFCands_btagPtRatio, JetPFCands_btagSip3dSig, JetPFCands_btagSip3dVal,
+    PFCands_charge, PFCands_d0, PFCands_d0Err, PFCands_dz, 
+    PFCands_dzErr, PFCands_eta, PFCands_lostInnerHits, PFCands_mass, 
+    PFCands_pdgId, PFCands_phi, PFCands_pt, PFCands_puppiWeight,
+    PFCands_puppiWeightNoLep, PFCands_pvAssocQuality, PFCands_trkChi2, 
+    PFCands_trkQuality, PFCands_vtxChi2
+  ]
   globals: [Jet_pt, GenJet_pt]

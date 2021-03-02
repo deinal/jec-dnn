@@ -4,11 +4,27 @@ import tensorflow as tf
 import numpy as np
 
 
-def create_dataset(features, batch_size):
+def create_datasets(features, batch_size, train_size, test_size):
 
     pickle_paths = glob.glob('./data/*.pkl')
+    num_files = len(pickle_paths)
+    train_split = int(train_size * num_files)
+    test_split = int(test_size * num_files) + train_split
     
-    dataset = tf.data.Dataset.from_tensor_slices(pickle_paths)
+    train_files = pickle_paths[:train_split]
+    test_files = pickle_paths[train_split:test_split]
+    validation_files = pickle_paths[test_split:]
+
+    train = _create_dataset(train_files, features, batch_size)
+    test = _create_dataset(test_files, features, batch_size)
+    validation = _create_dataset(validation_files, features, batch_size)
+
+    return train, test, validation
+
+
+def _create_dataset(files, features, batch_size):
+    
+    dataset = tf.data.Dataset.from_tensor_slices(files)
 
     dataset = dataset.map(
         lambda path: _retrieve_data(path, features),

@@ -1,8 +1,11 @@
-
 import matplotlib.pyplot as plt
 
+
 def plot_loss(history):
-    plt.plot(history['loss'])
+    plt.ylim([0, history['loss'][1]])
+    plt.plot(history['loss'], label='training loss')
+    plt.plot(history['val_loss'], label='validation_loss')
     plt.xlabel('epoch')
-    plt.ylabel('training loss')
+    plt.ylabel('loss')
+    plt.legend()
     plt.savefig('plots/loss.png')
