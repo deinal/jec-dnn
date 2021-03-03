@@ -1,4 +1,7 @@
-epochs: 20
+indir: dummy
+outdir: dummy
+
+epochs: 5
 batch_size: 42
 train_size: 0.6
 validation_size: 0.2

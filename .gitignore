@@ -1,3 +1,4 @@
-data/
+data/*
+!data/dummy
 __pycache__/
 .ipynb_checkpoints/

@@ -9,7 +9,7 @@ class Sum(Layer):
         return tf.math.reduce_sum(inputs, axis=1)
 
 
-def get_model(num_features):
+def get_model(outdir, num_features):
     inputs = Input(shape=(None, num_features), ragged=True, name='inputs')
 
     inputs_slice = Input(shape=(inputs.shape[-1],), name='inputs_slice')
@@ -32,16 +32,16 @@ def get_model(num_features):
 
     model = Model(inputs=inputs, outputs=outputs, name='full')
 
-    _summarize_model(model)
+    _summarize_model(outdir, model)
 
     return model
 
 
-def _summarize_model(model):
+def _summarize_model(outdir, model):
     for layer in model.layers:
         if isinstance(layer, TimeDistributed):
             layer.layer.summary()
 
     model.summary()
 
-    plot_model(model, 'plots/model.png', dpi=100, show_shapes=True, expand_nested=True)
+    plot_model(model, f'./results/{outdir}/model.pdf', dpi=100, show_shapes=True, expand_nested=True)

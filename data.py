@@ -4,9 +4,9 @@ import tensorflow as tf
 import numpy as np
 
 
-def create_datasets(features, batch_size, train_size, test_size):
+def create_datasets(indir, features, batch_size, train_size, test_size):
 
-    pickle_paths = glob.glob('./data/*.pkl')
+    pickle_paths = glob.glob(f'./data/{indir}/*.pkl')
     num_files = len(pickle_paths)
     train_split = int(train_size * num_files)
     test_split = int(test_size * num_files) + train_split
@@ -19,7 +19,7 @@ def create_datasets(features, batch_size, train_size, test_size):
     test = _create_dataset(test_files, features, batch_size)
     validation = _create_dataset(validation_files, features, batch_size)
 
-    return train, test, validation
+    return train, validation, test, test_files
 
 
 def _create_dataset(files, features, batch_size):
@@ -69,8 +69,8 @@ def _read_pickle(path, globals_cols, constituents_cols):
     globals_cols = globals_cols.astype(str)
     constituents_cols = constituents_cols.astype(str)
 
-    with open(path, 'rb') as handle:
-        data = pickle.load(handle)
+    with open(path, 'rb') as f:
+        data = pickle.load(f)
 
     globals = data['globals'][globals_cols]
     constituents = data['constituents'][constituents_cols]

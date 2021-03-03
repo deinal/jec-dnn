@@ -2,6 +2,8 @@ import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 import tensorflow as tf
+import numpy as np
+import pickle
 import yaml
 from model import get_model
 from plotter import plot_loss
@@ -16,19 +18,31 @@ if __name__ == '__main__':
     with open('config.yaml') as f:
         config = yaml.safe_load(f)
 
-    train, test, validation = create_datasets(
-        features=config['features'], batch_size=config['batch_size'],
+    outdir = config['outdir']
+    try:
+        os.mkdir(f'results/{outdir}')
+    except FileExistsError:
+        pass
+
+    train, validation, test, test_files = create_datasets(
+        indir=config['indir'], features=config['features'], batch_size=config['batch_size'],
         train_size=config['train_size'], test_size=config['test_size']
     )
 
     train = train.shuffle(100)
 
-    dnn = get_model(num_features=len(config['features']['constituents']))
+    dnn = get_model(outdir=outdir, num_features=len(config['features']['constituents']))
 
     dnn.compile(optimizer='adam', loss='mean_absolute_error')
 
     fit = dnn.fit(train, validation_data=validation, epochs=config['epochs'])
 
-    plot_loss(fit.history)
-
     predictions = dnn.predict(test)
+
+    # Save predictions and corresponding test files
+    with open(f'./results/{outdir}/predictions.pkl', 'wb') as f:
+        pickle.dump((predictions, test_files), f)
+
+    # Save training history
+    with open(f'./results/{outdir}/history.pkl', 'wb') as f:
+        pickle.dump(fit.history, f)
