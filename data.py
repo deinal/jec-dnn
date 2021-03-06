@@ -92,46 +92,34 @@ def _read_nanoaod(path, jets_cols, gen_jets_cols, jet_pf_cands_cols, pf_cands_co
     with uproot.open(path) as file:
         events = file['Events'].arrays(all_features)
 
-    # Concatenate leading jets vertically
-    jets = events[jets_cols]
-    jets = ak.concatenate((jets[:,0:1], jets[:,1:2]), axis=0)
-    jets_df = ak.to_pandas(jets)
+    # Select global observables
+    globals = events[jets_cols + gen_jets_cols]
+    
+    # Reorder gen jets according to the jet collection
+    for field in gen_jets_cols:
+        globals[field] = globals[field][events.Jet_genJetIdx]
 
-    # Sort gen jets according to the jet collection and concatenate leading gen jets vertically
-    gen_jets = events[gen_jets_cols][events.Jet_genJetIdx]
-    gen_jets = ak.concatenate((gen_jets[:,0:1], gen_jets[:,1:2]), axis=0)
-    gen_jets_df = ak.to_pandas(gen_jets)
+    # Select leading jets and concatenate vertically to have one jet's globals per row
+    globals = ak.concatenate((globals[:,0:1], globals[:,1:2]), axis=0)
+    globals = ak.to_pandas(globals)
 
-    # Concatentate jets and gen jets horizontally
-    globals = pd.concat((jets_df, gen_jets_df), axis=1)
+    # Select pf candidates
+    constituents = events[jet_pf_cands_cols + pf_cands_cols]
 
-    # Select jet pf cands
-    jet_pf_cands = events[jet_pf_cands_cols]
-    jet_pf_cands_df = ak.to_pandas(jet_pf_cands)
-
-    # Sort pf cands according to jet pf cands collection
-    pf_cands = events[pf_cands_cols][events.JetPFCands_pFCandsIdx]
-    pf_cands_df = ak.to_pandas(pf_cands)
-
-    # Concatenate pf cands and jet pf cands horizontally
-    constituents = pd.concat((pf_cands_df, jet_pf_cands_df), axis=1)
-
-    # Make a tuple of leading jet constituents and next-to-leading jet constituents 
-    constituents = (constituents[constituents.JetPFCands_jetIdx == 0], constituents[constituents.JetPFCands_jetIdx == 1])
-
-    # Create a new outer multi index for next-to-leading jet constituents in preparation for concatenation
-    shift = constituents[0].index[-1][0] + 1
-    outer_index = constituents[1].index.get_level_values(0) + shift
-    inner_index = constituents[1].index.get_level_values(1)
-    constituents[1].index = pd.MultiIndex.from_tuples(zip(outer_index, inner_index), names=('entry', 'subentry'))
-
-    # Concatenate leading jet constituents and next-to-leading jet constituents vertically
-    constituents = pd.concat(constituents, axis=0)
+    # Reorder pf cands according to the jet pf cands collection
+    for field in pf_cands_cols:
+        constituents[field] = constituents[field][events.JetPFCands_pFCandsIdx]
+    
+    # Select leading jets and concatenate vertically to have one jet's constituents per row
+    constituents = ak.concatenate(
+        (constituents[constituents.JetPFCands_jetIdx == 0], constituents[constituents.JetPFCands_jetIdx == 1]), axis=0
+    )
+    constituents = ak.to_pandas(constituents)
 
     # Calculate regression target
     target = globals['GenJet_pt'] / globals['Jet_pt']
 
-    # Calculate the lengths of every constituent subset
+    # Calculate the lengths of every set of constituents
     _, row_lengths = np.unique(constituents.index.get_level_values(0), return_counts=True)
 
     # Construct a list of arrays with the desired data
