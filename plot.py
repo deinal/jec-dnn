@@ -1,5 +1,7 @@
 import yaml
 import pickle
+import uproot
+import awkward as ak
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -8,9 +10,21 @@ import matplotlib.pyplot as plt
 def read_data(paths, predictions):
     dfs = []
     for path in paths:
-        with open(path, 'rb') as handle:
-            data = pickle.load(handle)
-        df = data['globals'][['Jet_pt', 'GenJet_pt', 'GenJet_partonFlavour', 'GenJet_hadronFlavour', 'GenJet_eta']]
+        with uproot.open(path) as file:
+            events = file['Events'].arrays([
+                'Jet_pt', 'Jet_genJetIdx', 'GenJet_pt', 'GenJet_partonFlavour', 'GenJet_hadronFlavour'
+            ])
+
+        jets = events[['Jet_pt']]
+        jets = ak.concatenate((jets[:,0:1], jets[:,1:2]), axis=0)
+        jets_df = ak.to_pandas(jets)
+
+        gen_jets = events[['GenJet_pt', 'GenJet_partonFlavour', 'GenJet_hadronFlavour']][events.Jet_genJetIdx]
+        gen_jets = ak.concatenate((gen_jets[:,0:1], gen_jets[:,1:2]), axis=0)
+        gen_jets_df = ak.to_pandas(gen_jets)
+
+        df = pd.concat((jets_df, gen_jets_df), axis=1)
+
         flavour = df.GenJet_hadronFlavour.where(df.GenJet_hadronFlavour != 0, other=np.abs(df.GenJet_partonFlavour))
         df = df.drop(columns=['GenJet_partonFlavour', 'GenJet_hadronFlavour'])
         df['flavour'] = flavour
@@ -59,13 +73,15 @@ def plot_mean_response(outdir, df, flavour):
     )
     fig.suptitle('Mean ' + flavour + '-jet response w.r.t. gen p$_{T}$')
 
-    ax[0].errorbar(bin_centers, dnn_response_mean, yerr=dnn_response_std, fmt='o', label='DNN')
-    ax[0].errorbar(bin_centers, response_mean, yerr=response_std, fmt='o', label='Standard')
+    ax[0].errorbar(bin_centers, dnn_response_mean, yerr=dnn_response_std, ms=4, fmt='o', alpha=.7, capsize=3, capthick=1, label='DNN')
+    ax[0].fill_between(bin_centers, dnn_response_mean - dnn_response_std, dnn_response_mean + dnn_response_std, alpha=.2)
+    ax[0].errorbar(bin_centers, response_mean, yerr=response_std, ms=4, fmt='o', alpha=.7, capsize=3, capthick=1, label='Standard')
+    ax[0].fill_between(bin_centers, response_mean - response_std, response_mean + response_std, alpha=.2)
     ax[0].axhline(1, ls='dashed', c='gray')
     ax[0].set_ylabel("Mean response")
     ax[0].legend()
 
-    ax[1].hist(df.GenJet_pt, bins=binning)
+    ax[1].hist(df.GenJet_pt, bins=binning, alpha=.7)
     ax[1].set_ylabel("Jets/bin")
     ax[1].set_xlabel("gen p$_{T}$")
 
@@ -85,7 +101,7 @@ if __name__ == '__main__':
 
     with open(f'./results/{outdir}/predictions.pkl', 'rb') as f:
         predictions, test_files = pickle.load(f)
-
+    
     df = read_data(test_files, predictions)
 
     for flavour, ids in [

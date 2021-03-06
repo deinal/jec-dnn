@@ -2,11 +2,9 @@ import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 import tensorflow as tf
-import numpy as np
 import pickle
 import yaml
 from model import get_model
-from plotter import plot_loss
 from data import create_datasets
 
 
@@ -31,7 +29,9 @@ if __name__ == '__main__':
 
     train = train.shuffle(100)
 
-    dnn = get_model(outdir=outdir, num_features=len(config['features']['constituents']))
+    num_features = len(config['features']['jet_pf_cands']) + len(config['features']['pf_cands'])
+
+    dnn = get_model(outdir=outdir, num_features=num_features)
 
     dnn.compile(optimizer='adam', loss='mean_absolute_error')
 
