@@ -35,7 +35,18 @@ if __name__ == '__main__':
 
     dnn.compile(optimizer='adam', loss='mean_absolute_error')
 
-    fit = dnn.fit(train, validation_data=validation, epochs=config['epochs'])
+    # Reduce learning rate when nearing convergence
+    reduce_lr_on_plateau = tf.keras.callbacks.ReduceLROnPlateau(
+        monitor='val_loss', factor=config['factor'], patience=config['patience'], min_lr=config['min_lr'],
+        mode='auto', min_delta=config['min_delta'], cooldown=0, verbose=1
+    )
+    # Stop early if the network stops improving
+    early_stopping = tf.keras.callbacks.EarlyStopping(
+        monitor='val_loss', min_delta=config['min_delta'], patience=config['patience'], 
+        mode='auto', baseline=None, restore_best_weights=True, verbose=1
+    )
+
+    fit = dnn.fit(train, validation_data=validation, epochs=config['epochs'], callbacks=[reduce_lr_on_plateau, early_stopping])
 
     predictions = dnn.predict(test)
 
