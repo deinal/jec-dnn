@@ -9,24 +9,20 @@ class Sum(Layer):
         return tf.math.reduce_sum(inputs, axis=1)
 
 
-def get_model(outdir, num_features):
+def get_model(outdir, num_features, config):
     inputs = Input(shape=(None, num_features), ragged=True, name='inputs')
 
     inputs_slice = Input(shape=(inputs.shape[-1],), name='inputs_slice')
 
-    x = Dense(100, kernel_initializer='he_uniform', use_bias=True, name='deepset_dense')(inputs_slice)
+    outputs_slice = _mlp(inputs_slice, config['layers'], config['activation'], config['initializer'], 'deepset')
 
-    outputs_slice = Activation('relu', name='deepset_activation')(x)
+    deepset_model_slice = Model(inputs=inputs_slice, outputs=outputs_slice, name='deepset_model_slice')
 
-    submodel_slice = Model(inputs=inputs_slice, outputs=outputs_slice, name='deepset_submodel')
+    deepset_outputs = TimeDistributed(deepset_model_slice, name='deepset_distributed')(inputs)
 
-    outputs = TimeDistributed(submodel_slice, name='deepset_distributed')(inputs)
+    head_inputs_deepset = Sum(name='deepset_sum')(deepset_outputs)
 
-    outputs = Sum(name='deepset_sum')(outputs)
-
-    x = Dense(100, kernel_initializer='he_uniform', use_bias=True, name='head_dense')(outputs)
-
-    x = Activation('relu', name='head_activation')(x)
+    x = _mlp(head_inputs_deepset, config['layers'], config['activation'], config['initializer'], 'head')
 
     outputs = Dense(1, name='head_dense_output')(x)
 
@@ -35,6 +31,13 @@ def get_model(outdir, num_features):
     _summarize_model(outdir, model)
 
     return model
+
+
+def _mlp(x, layers, activation, initializer, name):
+    for i, units in enumerate(layers):
+        x = Dense(units, kernel_initializer=initializer, use_bias=True, name=f'{name}_dense_{i}')(x)
+        x = Activation(activation, name=f'{name}_activation_{i}')(x)
+    return x
 
 
 def _summarize_model(outdir, model):

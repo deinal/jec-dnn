@@ -77,7 +77,7 @@ def plot_mean_response(outdir, df, flavour):
     ax[0].fill_between(bin_centers, dnn_response_mean - dnn_response_std, dnn_response_mean + dnn_response_std, alpha=.2)
     ax[0].errorbar(bin_centers, response_mean, yerr=response_std, ms=4, fmt='o', alpha=.7, capsize=3, capthick=1, label='Standard')
     ax[0].fill_between(bin_centers, response_mean - response_std, response_mean + response_std, alpha=.2)
-    ax[0].axhline(1, ls='dashed', c='gray')
+    ax[0].axhline(1, ls='dashed', c='gray', alpha=.7)
     ax[0].set_ylabel("Mean response")
     ax[0].legend()
 

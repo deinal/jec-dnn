@@ -5,20 +5,20 @@ import pandas as pd
 import uproot
 import awkward as ak
 
-def create_datasets(indir, features, batch_size, train_size, test_size):
+def create_datasets(indir, config):
 
     pickle_paths = glob.glob(f'./data/{indir}/*.root')
     num_files = len(pickle_paths)
-    train_split = int(train_size * num_files)
-    test_split = int(test_size * num_files) + train_split
+    train_split = int(config['train_size'] * num_files)
+    test_split = int(config['test_size'] * num_files) + train_split
     
     train_files = pickle_paths[:train_split]
     test_files = pickle_paths[train_split:test_split]
     validation_files = pickle_paths[test_split:]
 
-    train = _create_dataset(train_files, features, batch_size)
-    test = _create_dataset(test_files, features, batch_size)
-    validation = _create_dataset(validation_files, features, batch_size)
+    train = _create_dataset(train_files, config['features'], config['batch_size'])
+    test = _create_dataset(test_files, config['features'], config['batch_size'])
+    validation = _create_dataset(validation_files, config['features'], config['batch_size'])
 
     return train, validation, test, test_files
 

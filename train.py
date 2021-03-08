@@ -8,6 +8,21 @@ from model import get_model
 from data import create_datasets
 
 
+def get_callbacks(config):
+    # Reduce learning rate when nearing convergence
+    reduce_lr_on_plateau = tf.keras.callbacks.ReduceLROnPlateau(
+        monitor='val_loss', factor=config['factor'], patience=config['patience'], min_lr=config['min_lr'],
+        mode='auto', min_delta=config['min_delta'], cooldown=0, verbose=1
+    )
+    # Stop early if the network stops improving
+    early_stopping = tf.keras.callbacks.EarlyStopping(
+        monitor='val_loss', min_delta=config['min_delta'], patience=config['patience'], 
+        mode='auto', baseline=None, restore_best_weights=True, verbose=1
+    )
+
+    return [reduce_lr_on_plateau, early_stopping]
+
+
 if __name__ == '__main__':
 
     for device in tf.config.list_physical_devices('GPU'):
@@ -22,31 +37,19 @@ if __name__ == '__main__':
     except FileExistsError:
         pass
 
-    train, validation, test, test_files = create_datasets(
-        indir=config['indir'], features=config['features'], batch_size=config['batch_size'],
-        train_size=config['train_size'], test_size=config['test_size']
-    )
+    train, validation, test, test_files = create_datasets(config['indir'], config['data'])
 
     train = train.shuffle(100)
 
     num_features = len(config['features']['jet_pf_cands']) + len(config['features']['pf_cands'])
 
-    dnn = get_model(outdir=outdir, num_features=num_features)
+    dnn = get_model(outdir, num_features, config['model'])
 
     dnn.compile(optimizer='adam', loss='mean_absolute_error')
 
-    # Reduce learning rate when nearing convergence
-    reduce_lr_on_plateau = tf.keras.callbacks.ReduceLROnPlateau(
-        monitor='val_loss', factor=config['factor'], patience=config['patience'], min_lr=config['min_lr'],
-        mode='auto', min_delta=config['min_delta'], cooldown=0, verbose=1
-    )
-    # Stop early if the network stops improving
-    early_stopping = tf.keras.callbacks.EarlyStopping(
-        monitor='val_loss', min_delta=config['min_delta'], patience=config['patience'], 
-        mode='auto', baseline=None, restore_best_weights=True, verbose=1
-    )
+    callbacks = get_callbacks(config['callbacks'])
 
-    fit = dnn.fit(train, validation_data=validation, epochs=config['epochs'], callbacks=[reduce_lr_on_plateau, early_stopping])
+    fit = dnn.fit(train, validation_data=validation, epochs=config['epochs'], callbacks=callbacks)
 
     predictions = dnn.predict(test)
 
