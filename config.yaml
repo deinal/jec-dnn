@@ -2,6 +2,8 @@ indir: sample
 outdir: sample
 
 epochs: 10
+optimizer: adam
+loss: mean_absolute_error
 
 callbacks:
   min_delta: 1.e-4
@@ -13,24 +15,24 @@ model:
   layers: [100, 100, 100]
   activation: relu
   initializer: he_uniform
+  dropout: 0.1
 
 data:
-  batch_size: 42
+  batch_size: 400
   train_size: 0.6
   validation_size: 0.2
   test_size: 0.2
   
   features:
     jets: [
-      Jet_pt, Jet_genJetIdx, Jet_area, Jet_eta, Jet_mass, Jet_phi, Jet_muEF,
+      Jet_pt, Jet_area, Jet_eta, Jet_mass, Jet_phi, Jet_muEF,
       Jet_hfEmEF, Jet_hfHEF, Jet_chEmEF, Jet_chHEF, Jet_neEmEF, Jet_neHEF
     ]
     gen_jets: [
       GenJet_pt, GenJet_eta, GenJet_partonFlavour, GenJet_hadronFlavour
     ]
     jet_pf_cands: [
-      JetPFCands_pt, JetPFCands_jetIdx, JetPFCands_pFCandsIdx, 
-      JetPFCands_btagEtaRel, JetPFCands_btagJetDistVal, JetPFCands_btagPParRatio,
+      JetPFCands_pt, JetPFCands_btagEtaRel, JetPFCands_btagJetDistVal, JetPFCands_btagPParRatio,
       JetPFCands_btagPtRatio, JetPFCands_btagSip3dSig, JetPFCands_btagSip3dVal
     ]
     pf_cands: [

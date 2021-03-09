@@ -1,12 +1,11 @@
 import glob
 import tensorflow as tf
 import numpy as np
-import pandas as pd
 import uproot
 import awkward as ak
+from tensorflow.keras.layers.experimental.preprocessing import Normalization
 
 def create_datasets(indir, config):
-
     pickle_paths = glob.glob(f'./data/{indir}/*.root')
     num_files = len(pickle_paths)
     train_split = int(config['train_size'] * num_files)
@@ -24,7 +23,6 @@ def create_datasets(indir, config):
 
 
 def _create_dataset(files, features, batch_size):
-    
     dataset = tf.data.Dataset.from_tensor_slices(files)
 
     dataset = dataset.map(
@@ -40,7 +38,6 @@ def _create_dataset(files, features, batch_size):
 
 
 def _retrieve_data(path, features):
-
     inp = [
         path, features['jets'], features['gen_jets'], features['jet_pf_cands'], features['pf_cands']
     ]
@@ -66,19 +63,27 @@ def _retrieve_data(path, features):
     row_lengths = data.pop('row_lengths')
     target = data.pop('target')
 
+    inputs = {}
+
+    globals_cols = features['jets']
+
+    for col in globals_cols:
+        data[col] = tf.expand_dims(data[col], axis=1)
+
+    inputs['globals'] = tf.concat([data[col] for col in globals_cols], axis=1)
+
     constituent_cols = features['jet_pf_cands'] + features['pf_cands']
 
-    for constituent in constituent_cols:
-        data[constituent] = tf.RaggedTensor.from_row_lengths(data[constituent], row_lengths=row_lengths)
-        data[constituent] = tf.expand_dims(data[constituent], axis=2)
+    for col in constituent_cols:
+        data[col] = tf.RaggedTensor.from_row_lengths(data[col], row_lengths=row_lengths)
+        data[col] = tf.expand_dims(data[col], axis=2)
 
-    inputs = tf.concat([data[name] for name in constituent_cols], axis=2)
+    inputs['constituents'] = tf.concat([data[col] for col in constituent_cols], axis=2)
 
     return (inputs, target)
 
 
 def _read_nanoaod(path, jets_cols, gen_jets_cols, jet_pf_cands_cols, pf_cands_cols):
-
     # Decode bytestrings
     path = path.decode()
     jets_cols = [col.decode() for col in jets_cols]
@@ -86,7 +91,9 @@ def _read_nanoaod(path, jets_cols, gen_jets_cols, jet_pf_cands_cols, pf_cands_co
     jet_pf_cands_cols = [col.decode() for col in jet_pf_cands_cols]
     pf_cands_cols = [col.decode() for col in pf_cands_cols]
 
-    all_features = jets_cols + gen_jets_cols + jet_pf_cands_cols + pf_cands_cols
+    idx_cols = ['Jet_genJetIdx', 'JetPFCands_jetIdx', 'JetPFCands_pFCandsIdx']
+
+    all_features = jets_cols + gen_jets_cols + jet_pf_cands_cols + pf_cands_cols + idx_cols
 
     # open root file
     with uproot.open(path) as file:
@@ -112,7 +119,7 @@ def _read_nanoaod(path, jets_cols, gen_jets_cols, jet_pf_cands_cols, pf_cands_co
     
     # Select leading jets and concatenate vertically to have one jet's constituents per row
     constituents = ak.concatenate(
-        (constituents[constituents.JetPFCands_jetIdx == 0], constituents[constituents.JetPFCands_jetIdx == 1]), axis=0
+        (constituents[events.JetPFCands_jetIdx == 0], constituents[events.JetPFCands_jetIdx == 1]), axis=0
     )
     constituents = ak.to_pandas(constituents)
 

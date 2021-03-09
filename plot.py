@@ -60,7 +60,6 @@ def get_binned_statistics(variable, binning_variable, binning):
 
 
 def plot_mean_response(outdir, df, flavour):
-    
     binning = np.linspace(200, 2200, 20)
     bin_centers = binning + (binning[1] - binning[0]) / 2.0
 

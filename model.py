@@ -1,6 +1,6 @@
 import tensorflow as tf
 from tensorflow.keras import Input, Model
-from tensorflow.keras.layers import Activation, Dense, TimeDistributed, Layer
+from tensorflow.keras.layers import Activation, Dense, TimeDistributed, BatchNormalization, Dropout,  Concatenate, Layer
 from tensorflow.keras.utils import plot_model
 
 
@@ -9,34 +9,40 @@ class Sum(Layer):
         return tf.math.reduce_sum(inputs, axis=1)
 
 
-def get_model(outdir, num_features, config):
-    inputs = Input(shape=(None, num_features), ragged=True, name='inputs')
+def get_model(outdir, num_features, num_globals, config):
+    constituents = Input(shape=(None, num_features), ragged=True, name='constituents')
 
-    inputs_slice = Input(shape=(inputs.shape[-1],), name='inputs_slice')
+    constituents_slice = Input(shape=(constituents.shape[-1],), name='constituents_slice')
 
-    outputs_slice = _mlp(inputs_slice, config['layers'], config['activation'], config['initializer'], 'deepset')
+    deepset_outputs_slice = _mlp(constituents_slice, config, 'deepset')
 
-    deepset_model_slice = Model(inputs=inputs_slice, outputs=outputs_slice, name='deepset_model_slice')
+    deepset_model_slice = Model(inputs=constituents_slice, outputs=deepset_outputs_slice, name='deepset_model_slice')
 
-    deepset_outputs = TimeDistributed(deepset_model_slice, name='deepset_distributed')(inputs)
+    deepset_outputs = TimeDistributed(deepset_model_slice, name='deepset_distributed')(constituents)
 
-    head_inputs_deepset = Sum(name='deepset_sum')(deepset_outputs)
+    constituents_head = Sum(name='constituents_head')(deepset_outputs)
 
-    x = _mlp(head_inputs_deepset, config['layers'], config['activation'], config['initializer'], 'head')
+    globals = Input(shape=(num_globals,), name='globals')
+
+    inputs_head = Concatenate(name='head')([constituents_head] + [globals])
+
+    x = _mlp(inputs_head, config, 'head')
 
     outputs = Dense(1, name='head_dense_output')(x)
 
-    model = Model(inputs=inputs, outputs=outputs, name='full')
+    model = Model(inputs=[constituents, globals], outputs=outputs, name='dnn')
 
     _summarize_model(outdir, model)
 
     return model
 
 
-def _mlp(x, layers, activation, initializer, name):
-    for i, units in enumerate(layers):
-        x = Dense(units, kernel_initializer=initializer, use_bias=True, name=f'{name}_dense_{i}')(x)
-        x = Activation(activation, name=f'{name}_activation_{i}')(x)
+def _mlp(x, config, name):
+    for i, units in enumerate(config['layers'], start=1):
+        x = Dense(units, kernel_initializer=config['initializer'], use_bias=True, name=f'{name}_dense_{i}')(x)
+        x = BatchNormalization(name=f'{name}_batch_normalization_{i}')(x)
+        x = Activation(config['activation'], name=f'{name}_activation_{i}')(x)
+        x = Dropout(config['dropout'], name=f'{name}_dropout_{i}')(x)
     return x
 
 

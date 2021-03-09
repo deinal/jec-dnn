@@ -4,6 +4,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import tensorflow as tf
 import pickle
 import yaml
+import multiprocessing
 from model import get_model
 from data import create_datasets
 
@@ -24,7 +25,6 @@ def get_callbacks(config):
 
 
 if __name__ == '__main__':
-
     for device in tf.config.list_physical_devices('GPU'):
         print(device)
 
@@ -41,17 +41,19 @@ if __name__ == '__main__':
 
     train = train.shuffle(100)
 
-    num_features = len(config['features']['jet_pf_cands']) + len(config['features']['pf_cands'])
+    num_constituents = len(config['data']['features']['jet_pf_cands']) + len(config['data']['features']['pf_cands'])
+    num_globals = len(config['data']['features']['jets'])
 
-    dnn = get_model(outdir, num_features, config['model'])
-
-    dnn.compile(optimizer='adam', loss='mean_absolute_error')
+    strategy = tf.distribute.MirroredStrategy()
+    with strategy.scope():
+        dnn = get_model(outdir, num_constituents, num_globals, config['model'])
+        dnn.compile(optimizer=config['optimizer'], loss=config['loss'])
 
     callbacks = get_callbacks(config['callbacks'])
 
     fit = dnn.fit(train, validation_data=validation, epochs=config['epochs'], callbacks=callbacks)
 
-    predictions = dnn.predict(test)
+    predictions = dnn.predict(test, use_multiprocessing=True, workers=multiprocessing.cpu_count())
 
     # Save predictions and corresponding test files
     with open(f'./results/{outdir}/predictions.pkl', 'wb') as f:
@@ -60,3 +62,6 @@ if __name__ == '__main__':
     # Save training history
     with open(f'./results/{outdir}/history.pkl', 'wb') as f:
         pickle.dump(fit.history, f)
+
+    # Save model
+    dnn.save(f'./results/{outdir}/dnn')
