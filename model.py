@@ -50,7 +50,9 @@ def _summarize_model(outdir, model):
     for layer in model.layers:
         if isinstance(layer, TimeDistributed):
             layer.layer.summary()
+            plot_model(layer.layer, f'./results/{outdir}/{layer.layer.name}.pdf', dpi=100, show_shapes=True)
 
     model.summary()
 
-    plot_model(model, f'./results/{outdir}/model.pdf', dpi=100, show_shapes=True, expand_nested=True)
+    plot_model(model, f'./results/{outdir}/model.pdf', dpi=100, show_shapes=True)
+    plot_model(model, f'./results/{outdir}/full_model.pdf', dpi=100, show_shapes=True, expand_nested=True)

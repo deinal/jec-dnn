@@ -1,19 +1,18 @@
 import glob
 import tensorflow as tf
-import numpy as np
-import uproot
 import awkward as ak
-from tensorflow.keras.layers.experimental.preprocessing import Normalization
+from coffea.nanoevents import NanoEventsFactory, NanoAODSchema
+
 
 def create_datasets(indir, config):
-    pickle_paths = glob.glob(f'./data/{indir}/*.root')
-    num_files = len(pickle_paths)
+    root_paths = glob.glob(f'./data/{indir}/*.root')
+    num_files = len(root_paths)
     train_split = int(config['train_size'] * num_files)
     test_split = int(config['test_size'] * num_files) + train_split
     
-    train_files = pickle_paths[:train_split]
-    test_files = pickle_paths[train_split:test_split]
-    validation_files = pickle_paths[test_split:]
+    train_files = root_paths[:train_split]
+    test_files = root_paths[train_split:test_split]
+    validation_files = root_paths[test_split:]
 
     train = _create_dataset(train_files, config['features'], config['batch_size'])
     test = _create_dataset(test_files, config['features'], config['batch_size'])
@@ -39,43 +38,42 @@ def _create_dataset(files, features, batch_size):
 
 def _retrieve_data(path, features):
     inp = [
-        path, features['jets'], features['gen_jets'], features['jet_pf_cands'], features['pf_cands']
+        path, features['jets'], features['pf_cands']
     ]
     Tout = (
-        [tf.int32] + [tf.float32] +
-        [tf.float32] * len(features['jets']) + [tf.float32] * len(features['gen_jets']) +
-        [tf.float32] * len(features['jet_pf_cands']) + [tf.float32] * len(features['pf_cands'])
+        [tf.int64] + [tf.float32] +
+        [tf.float32] * len(features['jets']) +
+        [tf.float32] * len(features['pf_cands'])
     )
 
     data = tf.numpy_function(_read_nanoaod, inp=inp, Tout=Tout)
 
-    cols = (
-        ['row_lengths'] + ['target'] + 
-        features['jets'] + features['gen_jets'] + 
-        features['jet_pf_cands'] + features['pf_cands']
-    )
+    globals_cols = [f'jet_{field}' for field in features['jets']]
+    constituent_cols = [f'pf_cand_{field}' for field in features['pf_cands']]
+
+    cols = ['row_lengths'] + ['target'] + globals_cols + constituent_cols
+
     data = {key: value for key, value in zip(cols, data)}
 
-    # change each column's shape from <unknown> to (None,)
     for values in data.values():
-       values.set_shape((None,))
+        # shape from <unknown> to (None,)
+        values.set_shape((None,))
 
     row_lengths = data.pop('row_lengths')
     target = data.pop('target')
 
     inputs = {}
 
-    globals_cols = features['jets']
-
     for col in globals_cols:
+        # shape from (None,) to (None, 1)
         data[col] = tf.expand_dims(data[col], axis=1)
 
     inputs['globals'] = tf.concat([data[col] for col in globals_cols], axis=1)
 
-    constituent_cols = features['jet_pf_cands'] + features['pf_cands']
-
     for col in constituent_cols:
+        # shape from (None,) to (None, None)
         data[col] = tf.RaggedTensor.from_row_lengths(data[col], row_lengths=row_lengths)
+        # shape from (None, None) to (None, None, 1)
         data[col] = tf.expand_dims(data[col], axis=2)
 
     inputs['constituents'] = tf.concat([data[col] for col in constituent_cols], axis=2)
@@ -83,59 +81,33 @@ def _retrieve_data(path, features):
     return (inputs, target)
 
 
-def _read_nanoaod(path, jets_cols, gen_jets_cols, jet_pf_cands_cols, pf_cands_cols):
+def _read_nanoaod(path, jets_cols, pf_cands_cols):
     # Decode bytestrings
     path = path.decode()
     jets_cols = [col.decode() for col in jets_cols]
-    gen_jets_cols = [col.decode() for col in gen_jets_cols]
-    jet_pf_cands_cols = [col.decode() for col in jet_pf_cands_cols]
     pf_cands_cols = [col.decode() for col in pf_cands_cols]
 
-    idx_cols = ['Jet_genJetIdx', 'JetPFCands_jetIdx', 'JetPFCands_pFCandsIdx']
+    events = NanoEventsFactory.from_root(path, schemaclass=NanoAODSchema).events()
 
-    all_features = jets_cols + gen_jets_cols + jet_pf_cands_cols + pf_cands_cols + idx_cols
+    sorted_jets = events.Jet[ak.argsort(events.Jet.pt, ascending=False, axis=1)]
 
-    # open root file
-    with uproot.open(path) as file:
-        events = file['Events'].arrays(all_features)
+    leading_jets = ak.concatenate((sorted_jets[:,0:1], sorted_jets[:,1:2]), axis=0)
+    leading_jets = ak.flatten(leading_jets, axis=1)
 
-    # Select global observables
-    globals = events[jets_cols + gen_jets_cols]
-    
-    # Reorder gen jets according to the jet collection
-    for field in gen_jets_cols:
-        globals[field] = globals[field][events.Jet_genJetIdx]
+    globals = leading_jets[jets_cols]
+    target = leading_jets.matched_gen.pt / leading_jets.pt
 
-    # Select leading jets and concatenate vertically to have one jet's globals per row
-    globals = ak.concatenate((globals[:,0:1], globals[:,1:2]), axis=0)
-    globals = ak.to_pandas(globals)
+    constituents = leading_jets.constituents.pf[pf_cands_cols]
+    row_lengths = ak.num(constituents, axis=1)
+    constituents = ak.flatten(constituents, axis=1)
 
-    # Select pf candidates
-    constituents = events[jet_pf_cands_cols + pf_cands_cols]
+    # Construct a list of numpy arrays with the desired data
+    data = [ak.to_numpy(row_lengths)] + [ak.to_numpy(target)]
 
-    # Reorder pf cands according to the jet pf cands collection
-    for field in pf_cands_cols:
-        constituents[field] = constituents[field][events.JetPFCands_pFCandsIdx]
-    
-    # Select leading jets and concatenate vertically to have one jet's constituents per row
-    constituents = ak.concatenate(
-        (constituents[events.JetPFCands_jetIdx == 0], constituents[events.JetPFCands_jetIdx == 1]), axis=0
-    )
-    constituents = ak.to_pandas(constituents)
+    for col in jets_cols:
+        data.append(ak.to_numpy(globals[col]))
 
-    # Calculate regression target
-    target = globals['GenJet_pt'] / globals['Jet_pt']
-
-    # Calculate the lengths of every set of constituents
-    _, row_lengths = np.unique(constituents.index.get_level_values(0), return_counts=True)
-
-    # Construct a list of arrays with the desired data
-    data = [row_lengths.astype(np.int32)] + [target.astype(np.float32)]
-
-    for col in jets_cols + gen_jets_cols:
-        data.append(globals[col].astype(np.float32))
-
-    for col in jet_pf_cands_cols + pf_cands_cols:
-        data.append(constituents[col].astype(np.float32))
+    for col in pf_cands_cols:
+        data.append(ak.to_numpy(constituents[col]))
 
     return data

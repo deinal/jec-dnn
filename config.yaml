@@ -1,7 +1,7 @@
 indir: sample
 outdir: sample
 
-epochs: 10
+epochs: 5
 optimizer: adam
 loss: mean_absolute_error
 
@@ -25,20 +25,12 @@ data:
   
   features:
     jets: [
-      Jet_pt, Jet_area, Jet_eta, Jet_mass, Jet_phi, Jet_muEF,
-      Jet_hfEmEF, Jet_hfHEF, Jet_chEmEF, Jet_chHEF, Jet_neEmEF, Jet_neHEF
+      pt, area, eta, mass, phi, muEF,
+      hfEmEF, hfHEF, chEmEF, chHEF, neEmEF, neHEF
     ]
     gen_jets: [
-      GenJet_pt, GenJet_eta, GenJet_partonFlavour, GenJet_hadronFlavour
-    ]
-    jet_pf_cands: [
-      JetPFCands_pt, JetPFCands_btagEtaRel, JetPFCands_btagJetDistVal, JetPFCands_btagPParRatio,
-      JetPFCands_btagPtRatio, JetPFCands_btagSip3dSig, JetPFCands_btagSip3dVal
+      pt, eta, partonFlavour, hadronFlavour
     ]
     pf_cands: [
-      PFCands_charge, PFCands_d0, PFCands_d0Err, PFCands_dz, 
-      PFCands_dzErr, PFCands_eta, PFCands_lostInnerHits, PFCands_mass, 
-      PFCands_pdgId, PFCands_phi, PFCands_pt, PFCands_puppiWeight,
-      PFCands_puppiWeightNoLep, PFCands_pvAssocQuality, PFCands_trkChi2, 
-      PFCands_trkQuality, PFCands_vtxChi2
+      d0, d0Err, dz, dzErr, eta, mass, phi, pt
     ]

@@ -41,7 +41,7 @@ if __name__ == '__main__':
 
     train = train.shuffle(100)
 
-    num_constituents = len(config['data']['features']['jet_pf_cands']) + len(config['data']['features']['pf_cands'])
+    num_constituents = len(config['data']['features']['pf_cands'])
     num_globals = len(config['data']['features']['jets'])
 
     strategy = tf.distribute.MirroredStrategy()
