@@ -48,12 +48,12 @@ def _retrieve_data(path, features):
 
     data = tf.numpy_function(_read_nanoaod, inp=inp, Tout=Tout)
 
-    globals_cols = [f'jet_{field}' for field in features['jets']]
-    constituent_cols = [f'pf_cand_{field}' for field in features['pf_cands']]
+    global_fields = [f'jet_{field}' for field in features['jets']]
+    constituent_fields = [f'pf_cand_{field}' for field in features['pf_cands']]
 
-    cols = ['row_lengths'] + ['target'] + globals_cols + constituent_cols
+    fields = ['row_lengths'] + ['target'] + global_fields + constituent_fields
 
-    data = {key: value for key, value in zip(cols, data)}
+    data = {key: value for key, value in zip(fields, data)}
 
     for values in data.values():
         # shape from <unknown> to (None,)
@@ -64,28 +64,28 @@ def _retrieve_data(path, features):
 
     inputs = {}
 
-    for col in globals_cols:
+    for field in global_fields:
         # shape from (None,) to (None, 1)
-        data[col] = tf.expand_dims(data[col], axis=1)
+        data[field] = tf.expand_dims(data[field], axis=1)
 
-    inputs['globals'] = tf.concat([data[col] for col in globals_cols], axis=1)
+    inputs['globals'] = tf.concat([data[field] for field in global_fields], axis=1)
 
-    for col in constituent_cols:
+    for field in constituent_fields:
         # shape from (None,) to (None, None)
-        data[col] = tf.RaggedTensor.from_row_lengths(data[col], row_lengths=row_lengths)
+        data[field] = tf.RaggedTensor.from_row_lengths(data[field], row_lengths=row_lengths)
         # shape from (None, None) to (None, None, 1)
-        data[col] = tf.expand_dims(data[col], axis=2)
+        data[field] = tf.expand_dims(data[field], axis=2)
 
-    inputs['constituents'] = tf.concat([data[col] for col in constituent_cols], axis=2)
+    inputs['constituents'] = tf.concat([data[field] for field in constituent_fields], axis=2)
 
     return (inputs, target)
 
 
-def _read_nanoaod(path, jets_cols, pf_cands_cols):
+def _read_nanoaod(path, jet_fields, pf_cand_fields):
     # Decode bytestrings
     path = path.decode()
-    jets_cols = [col.decode() for col in jets_cols]
-    pf_cands_cols = [col.decode() for col in pf_cands_cols]
+    jet_fields = [field.decode() for field in jet_fields]
+    pf_cand_fields = [field.decode() for field in pf_cand_fields]
 
     events = NanoEventsFactory.from_root(path, schemaclass=NanoAODSchema).events()
 
@@ -94,20 +94,20 @@ def _read_nanoaod(path, jets_cols, pf_cands_cols):
     leading_jets = ak.concatenate((sorted_jets[:,0:1], sorted_jets[:,1:2]), axis=0)
     leading_jets = ak.flatten(leading_jets, axis=1)
 
-    globals = leading_jets[jets_cols]
+    globals = leading_jets[jet_fields]
     target = leading_jets.matched_gen.pt / leading_jets.pt
 
-    constituents = leading_jets.constituents.pf[pf_cands_cols]
+    constituents = leading_jets.constituents.pf[pf_cand_fields]
     row_lengths = ak.num(constituents, axis=1)
     constituents = ak.flatten(constituents, axis=1)
 
     # Construct a list of numpy arrays with the desired data
     data = [ak.to_numpy(row_lengths)] + [ak.to_numpy(target)]
 
-    for col in jets_cols:
-        data.append(ak.to_numpy(globals[col]))
+    for field in jet_fields:
+        data.append(ak.to_numpy(globals[field]))
 
-    for col in pf_cands_cols:
-        data.append(ak.to_numpy(constituents[col]))
+    for field in pf_cand_fields:
+        data.append(ak.to_numpy(constituents[field]))
 
     return data
