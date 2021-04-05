@@ -5,3 +5,4 @@ pandas==1.2.1
 matplotlib==3.3.4
 pyYAML==5.4.1
 pydot==1.4.2
+coffea==0.7.2

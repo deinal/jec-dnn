@@ -1,7 +1,7 @@
 import glob
 import tensorflow as tf
 import awkward as ak
-from coffea.nanoevents import NanoEventsFactory, NanoAODSchema
+from coffea.nanoevents import NanoEventsFactory, PFNanoAODSchema
 
 
 def create_datasets(indir, config):
@@ -87,7 +87,7 @@ def _read_nanoaod(path, jet_fields, pf_cand_fields):
     jet_fields = [field.decode() for field in jet_fields]
     pf_cand_fields = [field.decode() for field in pf_cand_fields]
 
-    events = NanoEventsFactory.from_root(path, schemaclass=NanoAODSchema).events()
+    events = NanoEventsFactory.from_root(path, schemaclass=PFNanoAODSchema).events()
 
     sorted_jets = events.Jet[ak.argsort(events.Jet.pt, ascending=False, axis=1)]
 
