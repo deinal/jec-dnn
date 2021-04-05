@@ -1,29 +1,28 @@
 import yaml
 import pickle
-import uproot
 import awkward as ak
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from coffea.nanoevents import NanoEventsFactory, PFNanoAODSchema
 
 
 def read_data(paths, predictions):
     dfs = []
     for path in paths:
-        with uproot.open(path) as file:
-            events = file['Events'].arrays([
-                'Jet_pt', 'Jet_genJetIdx', 'GenJet_pt', 'GenJet_partonFlavour', 'GenJet_hadronFlavour'
-            ])
+        events = NanoEventsFactory.from_root(path, schemaclass=PFNanoAODSchema).events()
 
-        jets = events[['Jet_pt']]
-        jets = ak.concatenate((jets[:,0:1], jets[:,1:2]), axis=0)
-        jets_df = ak.to_pandas(jets)
+        jets = events.Jet[(ak.count(events.Jet.matched_gen.pt, axis=1) >= 2)]
 
-        gen_jets = events[['GenJet_pt', 'GenJet_partonFlavour', 'GenJet_hadronFlavour']][events.Jet_genJetIdx]
-        gen_jets = ak.concatenate((gen_jets[:,0:1], gen_jets[:,1:2]), axis=0)
-        gen_jets_df = ak.to_pandas(gen_jets)
+        leading_jets = ak.concatenate((jets[:,0], jets[:,1]), axis=0)
 
-        df = pd.concat((jets_df, gen_jets_df), axis=1)
+        jet_pt = ak.to_pandas(leading_jets.pt)
+        gen_jet_pt = ak.to_pandas(leading_jets.matched_gen.pt)
+        parton_flavour = ak.to_pandas(leading_jets.matched_gen.partonFlavour)
+        hadron_flavour = ak.to_pandas(leading_jets.matched_gen.hadronFlavour)
+
+        df = pd.concat((jet_pt, gen_jet_pt, parton_flavour, hadron_flavour), axis=1)
+        df.columns = ['Jet_pt', 'GenJet_pt', 'GenJet_partonFlavour', 'GenJet_hadronFlavour']
 
         flavour = df.GenJet_hadronFlavour.where(df.GenJet_hadronFlavour != 0, other=np.abs(df.GenJet_partonFlavour))
         df = df.drop(columns=['GenJet_partonFlavour', 'GenJet_hadronFlavour'])
