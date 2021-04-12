@@ -62,13 +62,11 @@ def _retrieve_data(path, features):
     row_lengths = data.pop('row_lengths')
     target = data.pop('target')
 
-    inputs = {}
-
     for field in global_fields:
         # shape from (None,) to (None, 1)
         data[field] = tf.expand_dims(data[field], axis=1)
 
-    inputs['globals'] = tf.concat([data[field] for field in global_fields], axis=1)
+    globals = tf.concat([data[field] for field in global_fields], axis=1)
 
     for field in constituent_fields:
         # shape from (None,) to (None, None)
@@ -76,7 +74,10 @@ def _retrieve_data(path, features):
         # shape from (None, None) to (None, None, 1)
         data[field] = tf.expand_dims(data[field], axis=2)
 
-    inputs['constituents'] = tf.concat([data[field] for field in constituent_fields], axis=2)
+    constituents = tf.concat([data[field] for field in constituent_fields], axis=2)
+
+    # mind the order of the inputs when constructing the neural net 
+    inputs = [constituents, globals]
 
     return (inputs, target)
 
@@ -95,12 +96,17 @@ def _read_nanoaod(path, jet_fields, pf_cand_fields):
 
     leading_jets = ak.concatenate((sorted_jets[:,0], sorted_jets[:,1]), axis=0)
 
-    globals = leading_jets[jet_fields]
-    target = leading_jets.matched_gen.pt / leading_jets.pt
+    selected_jets = leading_jets[(leading_jets.matched_gen.pt > 30) & (abs(leading_jets.matched_gen.eta) < 2.5)]
 
-    constituents = leading_jets.constituents.pf[pf_cand_fields]
+    valid_jets = selected_jets[~ak.is_none(selected_jets.matched_gen.pt)]
+
+    target = valid_jets.matched_gen.pt / valid_jets.pt
+
+    globals = valid_jets[jet_fields]
+
+    constituents = valid_jets.constituents.pf[pf_cand_fields]
     row_lengths = ak.num(constituents, axis=1)
-    constituents = ak.flatten(constituents, axis=1)
+    flat_constituents = ak.flatten(constituents, axis=1)
 
     # Construct a list of numpy arrays with the desired data
     data = [ak.to_numpy(row_lengths)] + [ak.to_numpy(target)]
@@ -109,6 +115,6 @@ def _read_nanoaod(path, jet_fields, pf_cand_fields):
         data.append(ak.to_numpy(globals[field]))
 
     for field in pf_cand_fields:
-        data.append(ak.to_numpy(constituents[field]))
+        data.append(ak.to_numpy(flat_constituents[field]))
 
     return data

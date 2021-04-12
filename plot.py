@@ -14,7 +14,13 @@ def read_data(paths, predictions):
 
         jets = events.Jet[(ak.count(events.Jet.matched_gen.pt, axis=1) >= 2)]
 
-        leading_jets = ak.concatenate((jets[:,0], jets[:,1]), axis=0)
+        sorted_jets = jets[ak.argsort(jets.matched_gen.pt, ascending=False, axis=1)]
+
+        leading_jets = ak.concatenate((sorted_jets[:,0], sorted_jets[:,1]), axis=0)
+
+        selected_jets = leading_jets[(leading_jets.matched_gen.pt > 30) & (abs(leading_jets.matched_gen.eta) < 2.5)]
+
+        leading_jets = selected_jets[~ak.is_none(selected_jets.matched_gen.pt)]
 
         jet_pt = ak.to_pandas(leading_jets.pt)
         gen_jet_pt = ak.to_pandas(leading_jets.matched_gen.pt)
@@ -33,7 +39,9 @@ def read_data(paths, predictions):
     df = pd.concat(dfs, axis=0)
 
     df['response'] = df.Jet_pt / df.GenJet_pt
-    df['dnn_response'] = predictions
+
+    corrected_pt = predictions.flatten() * df.Jet_pt
+    df['dnn_response'] = corrected_pt / df.GenJet_pt
 
     return df
 
