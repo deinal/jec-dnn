@@ -55,23 +55,15 @@ def plot_loss(outdir, history):
     plt.savefig(f'./results/{outdir}/loss.pdf')
 
 
-def get_binned_statistics(variable, binning_variable, binning):
-    indices = np.digitize(binning_variable, binning)
-    bin_mean = np.empty_like(binning)
-    bin_std = np.empty_like(binning)
-    for i in range(len(binning)):
-        bin_data = variable[indices == i+1]
-        bin_mean[i] = bin_data.mean()
-        bin_std[i] = bin_data.std()
-    return bin_mean, bin_std
-
-
 def plot_mean_response(outdir, df, flavour):
-    binning = np.linspace(200, 2200, 20)
-    bin_centers = binning + (binning[1] - binning[0]) / 2.0
+    binning = np.geomspace(30, 3000, 20)
+    bin_centers = np.sqrt(binning[:-1] * binning[1:])
 
-    response_mean, response_std = get_binned_statistics(df.response, df.GenJet_pt, binning)
-    dnn_response_mean, dnn_response_std = get_binned_statistics(df.dnn_response, df.GenJet_pt, binning)
+    bins = df.groupby(pd.cut(df.GenJet_pt, binning))
+    response_mean = bins.response.mean()
+    response_std = bins.response.std()
+    dnn_response_mean = bins.dnn_response.mean() 
+    dnn_response_std = bins.dnn_response.std()
 
     fig, ax = plt.subplots(
         nrows=2, ncols=1, sharex=True, figsize=(10, 6),
@@ -84,12 +76,14 @@ def plot_mean_response(outdir, df, flavour):
     ax[0].errorbar(bin_centers, response_mean, yerr=response_std, ms=4, fmt='o', alpha=.7, capsize=3, capthick=1, label='Standard')
     ax[0].fill_between(bin_centers, response_mean - response_std, response_mean + response_std, alpha=.2)
     ax[0].axhline(1, ls='dashed', c='gray', alpha=.7)
-    ax[0].set_ylabel("Mean response")
+    ax[0].set_ylabel('Jets/bin')
+    ax[0].set_ylabel('Mean response')
     ax[0].legend()
 
     ax[1].hist(df.GenJet_pt, bins=binning, alpha=.7)
-    ax[1].set_ylabel("Jets/bin")
-    ax[1].set_xlabel("gen p$_{T}$")
+    ax[1].set_xscale('log')
+    ax[1].set_ylabel('Jets/bin')
+    ax[1].set_xlabel('gen p$_{T}$')
 
     fig.savefig(f'./results/{outdir}/{flavour}_mean_response.pdf')
 
