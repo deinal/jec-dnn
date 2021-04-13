@@ -1,15 +1,18 @@
 import tensorflow as tf
 from tensorflow.keras import Input, Model
 from tensorflow.keras.layers import Activation, Dense, TimeDistributed, BatchNormalization, Dropout,  Concatenate, Layer
-from tensorflow.keras.utils import plot_model
 
 
 class Sum(Layer):
-    def call(self, inputs: tf.RaggedTensor) -> tf.Tensor:
-        return tf.math.reduce_sum(inputs, axis=1)
+    def __init__(self, axis=1, **kwargs):
+        super().__init__(**kwargs)
+        self.axis = axis
+
+    def call(self, inputs):
+        return tf.math.reduce_sum(inputs, axis=self.axis)
 
 
-def get_model(outdir, num_features, num_globals, config):
+def get_model(num_features, num_globals, config):
     constituents = Input(shape=(None, num_features), ragged=True, name='constituents')
 
     constituents_slice = Input(shape=(constituents.shape[-1],), name='constituents_slice')
@@ -32,7 +35,9 @@ def get_model(outdir, num_features, num_globals, config):
 
     model = Model(inputs=[constituents, globals], outputs=outputs, name='dnn')
 
-    _summarize_model(outdir, model)
+    for layer in model.layers:
+        if isinstance(layer, TimeDistributed):
+            layer.layer.summary()
 
     return model
 
@@ -44,15 +49,3 @@ def _mlp(x, config, name):
         x = Activation(config['activation'], name=f'{name}_activation_{i}')(x)
         x = Dropout(config['dropout'], name=f'{name}_dropout_{i}')(x)
     return x
-
-
-def _summarize_model(outdir, model):
-    for layer in model.layers:
-        if isinstance(layer, TimeDistributed):
-            layer.layer.summary()
-            plot_model(layer.layer, f'./results/{outdir}/{layer.layer.name}.pdf', dpi=100, show_shapes=True)
-
-    model.summary()
-
-    plot_model(model, f'./results/{outdir}/model.pdf', dpi=100, show_shapes=True)
-    plot_model(model, f'./results/{outdir}/full_model.pdf', dpi=100, show_shapes=True, expand_nested=True)

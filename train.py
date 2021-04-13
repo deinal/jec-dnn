@@ -1,7 +1,6 @@
 import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-
 import tensorflow as tf
+import argparse
 import pickle
 import yaml
 import multiprocessing
@@ -25,29 +24,28 @@ def get_callbacks(config):
 
 
 if __name__ == '__main__':
-    for device in tf.config.list_physical_devices('GPU'):
-        print(device)
+    arg_parser = argparse.ArgumentParser(description=__doc__)
+    arg_parser.add_argument('-i', '--indir', required=True, help='Directory containing jet data')
+    arg_parser.add_argument('-o', '--outdir', required=True, help='Where to store outputs')
+    args = arg_parser.parse_args()
+
+    try:
+        os.mkdir(f'{args.outdir}')
+    except FileExistsError:
+        pass
 
     with open('config.yaml') as f:
         config = yaml.safe_load(f)
 
-    outdir = config['outdir']
-    try:
-        os.mkdir(f'results/{outdir}')
-    except FileExistsError:
-        pass
-
-    train, validation, test, test_files = create_datasets(config['indir'], config['data'])
+    train, validation, test, test_files = create_datasets(args.indir, config['data'])
 
     train = train.shuffle(100)
 
     num_constituents = len(config['data']['features']['pf_cands'])
     num_globals = len(config['data']['features']['jets'])
 
-    strategy = tf.distribute.MirroredStrategy()
-    with strategy.scope():
-        dnn = get_model(outdir, num_constituents, num_globals, config['model'])
-        dnn.compile(optimizer=config['optimizer'], loss=config['loss'])
+    dnn = get_model(num_constituents, num_globals, config['model'])
+    dnn.compile(optimizer=config['optimizer'], loss=config['loss'])
 
     callbacks = get_callbacks(config['callbacks'])
 
@@ -56,12 +54,12 @@ if __name__ == '__main__':
     predictions = dnn.predict(test, use_multiprocessing=True, workers=multiprocessing.cpu_count())
 
     # Save predictions and corresponding test files
-    with open(f'./results/{outdir}/predictions.pkl', 'wb') as f:
+    with open(f'{args.outdir}/predictions.pkl', 'wb') as f:
         pickle.dump((predictions, test_files), f)
 
     # Save training history
-    with open(f'./results/{outdir}/history.pkl', 'wb') as f:
+    with open(f'{args.outdir}/history.pkl', 'wb') as f:
         pickle.dump(fit.history, f)
 
     # Save model
-    dnn.save(f'./results/{outdir}/dnn')
+    dnn.save(f'{args.outdir}/dnn')

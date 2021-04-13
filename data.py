@@ -1,11 +1,12 @@
 import glob
+import warnings
 import tensorflow as tf
 import awkward as ak
 from coffea.nanoevents import NanoEventsFactory, PFNanoAODSchema
 
 
 def create_datasets(indir, config):
-    root_paths = glob.glob(f'./data/{indir}/*.root')
+    root_paths = glob.glob(f'{indir}/*.root')
     num_files = len(root_paths)
     train_split = int(config['train_size'] * num_files)
     test_split = int(config['test_size'] * num_files) + train_split
@@ -77,7 +78,7 @@ def _retrieve_data(path, features):
     constituents = tf.concat([data[field] for field in constituent_fields], axis=2)
 
     # mind the order of the inputs when constructing the neural net 
-    inputs = [constituents, globals]
+    inputs = (constituents, globals)
 
     return (inputs, target)
 
@@ -88,7 +89,10 @@ def _read_nanoaod(path, jet_fields, pf_cand_fields):
     jet_fields = [field.decode() for field in jet_fields]
     pf_cand_fields = [field.decode() for field in pf_cand_fields]
 
-    events = NanoEventsFactory.from_root(path, schemaclass=PFNanoAODSchema).events()
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', message='Found duplicate branch')
+        warnings.filterwarnings('ignore', message='Missing cross-reference index')
+        events = NanoEventsFactory.from_root(path, schemaclass=PFNanoAODSchema).events()
 
     jets = events.Jet[(ak.count(events.Jet.matched_gen.pt, axis=1) >= 2)]
 

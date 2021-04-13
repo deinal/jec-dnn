@@ -1,16 +1,21 @@
-import yaml
+import argparse
+import warnings
 import pickle
 import awkward as ak
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from coffea.nanoevents import NanoEventsFactory, PFNanoAODSchema
+from tensorflow import keras
 
 
 def read_data(paths, predictions):
     dfs = []
     for path in paths:
-        events = NanoEventsFactory.from_root(path, schemaclass=PFNanoAODSchema).events()
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', message='Found duplicate branch')
+            warnings.filterwarnings('ignore', message='Missing cross-reference index')
+            events = NanoEventsFactory.from_root(path, schemaclass=PFNanoAODSchema).events()
 
         jets = events.Jet[(ak.count(events.Jet.matched_gen.pt, axis=1) >= 2)]
 
@@ -46,13 +51,22 @@ def read_data(paths, predictions):
     return df
 
 
+def plot_model(outdir, model):
+    for layer in model.layers:
+        if isinstance(layer, keras.layers.TimeDistributed):
+            keras.utils.plot_model(layer.layer, f'{outdir}/{layer.layer.name}.pdf', dpi=100, show_shapes=True)
+
+    keras.utils.plot_model(model, f'{outdir}/model.pdf', dpi=100, show_shapes=True)
+    keras.utils.plot_model(model, f'{outdir}/full_model.pdf', dpi=100, show_shapes=True, expand_nested=True)
+
+
 def plot_loss(outdir, history):
     plt.plot(history['loss'][1:], label='Training loss')
     plt.plot(history['val_loss'][1:], label='Validation loss')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
     plt.legend()
-    plt.savefig(f'./results/{outdir}/loss.pdf')
+    plt.savefig(f'{outdir}/loss.pdf')
 
 
 def plot_mean_response(outdir, df, flavour):
@@ -60,8 +74,10 @@ def plot_mean_response(outdir, df, flavour):
     bin_centers = np.sqrt(binning[:-1] * binning[1:])
 
     bins = df.groupby(pd.cut(df.GenJet_pt, binning))
+
     response_mean = bins.response.mean()
     response_std = bins.response.std()
+
     dnn_response_mean = bins.dnn_response.mean() 
     dnn_response_std = bins.dnn_response.std()
 
@@ -85,21 +101,25 @@ def plot_mean_response(outdir, df, flavour):
     ax[1].set_ylabel('Jets/bin')
     ax[1].set_xlabel('gen p$_{T}$')
 
-    fig.savefig(f'./results/{outdir}/{flavour}_mean_response.pdf')
+    fig.savefig(f'{outdir}/{flavour}_mean_response.pdf')
 
 
 if __name__ == '__main__':
-    with open('config.yaml') as f:
-        config = yaml.safe_load(f)
+    arg_parser = argparse.ArgumentParser(description=__doc__)
+    arg_parser.add_argument('-i', '--indir', required=True, help='Directory with dnn training results')
+    arg_parser.add_argument('-o', '--outdir', required=True, help='Where to store plots')
+    args = arg_parser.parse_args()
 
-    outdir = config['outdir']
+    dnn = keras.models.load_model(f'{args.indir}/dnn')
 
-    with open(f'./results/{outdir}/history.pkl', 'rb') as f:
+    plot_model(args.outdir, dnn)
+
+    with open(f'{args.indir}/history.pkl', 'rb') as f:
         history = pickle.load(f)
 
-    plot_loss(outdir, history)
+    plot_loss(args.outdir, history)
 
-    with open(f'./results/{outdir}/predictions.pkl', 'rb') as f:
+    with open(f'{args.indir}/predictions.pkl', 'rb') as f:
         predictions, test_files = pickle.load(f)
     
     df = read_data(test_files, predictions)
@@ -107,4 +127,4 @@ if __name__ == '__main__':
     for flavour, ids in [
         ('uds', {1, 2, 3}), ('b', {5}), ('g', {21}), ('all', {0, 1, 2, 3, 4, 5, 21})
     ]:
-        plot_mean_response(outdir, df[df.flavour.isin(ids)], flavour)
+        plot_mean_response(args.outdir, df[df.flavour.isin(ids)], flavour)
