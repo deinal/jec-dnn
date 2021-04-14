@@ -3,6 +3,7 @@ import warnings
 import tensorflow as tf
 import awkward as ak
 from coffea.nanoevents import NanoEventsFactory, PFNanoAODSchema
+import tensorflow_transform as tft
 
 
 def create_datasets(indir, config):
@@ -23,10 +24,18 @@ def create_datasets(indir, config):
 
 
 def _create_dataset(files, features, batch_size):
+    global_fields = [f'jet_{field}' for field in features['jets']['numerical']]
+    constituent_fields = [f'pf_cand_{field}' for field in features['pf_cands']['numerical']]
+
     dataset = tf.data.Dataset.from_tensor_slices(files)
 
     dataset = dataset.map(
-        lambda path: _retrieve_data(path, features),
+        lambda path: _retrieve_data(path, features, global_fields, constituent_fields),
+        num_parallel_calls=tf.data.experimental.AUTOTUNE,
+    )
+
+    dataset = dataset.map(
+        lambda data, target: (_preprocess(data, global_fields, constituent_fields), target),
         num_parallel_calls=tf.data.experimental.AUTOTUNE,
     )
 
@@ -37,20 +46,36 @@ def _create_dataset(files, features, batch_size):
     return dataset
 
 
-def _retrieve_data(path, features):
+def _preprocess(data, global_fields, constituent_fields):
+    for field in constituent_fields:
+        flat_constituent = data[field].flat_values
+        normalized_constituent = tft.scale_to_gaussian(flat_constituent)
+        data[field] = tf.RaggedTensor.from_row_splits(normalized_constituent, data[field].row_splits)
+
+    for field in global_fields:
+        data[field] = tft.scale_to_gaussian(data[field])
+    
+    constituents = tf.concat([data[field] for field in constituent_fields], axis=2)
+
+    globals = tf.concat([data[field] for field in global_fields], axis=1)
+
+    # mind the order of the inputs when constructing the neural net 
+    inputs = (constituents, globals)
+
+    return inputs
+
+
+def _retrieve_data(path, features, global_fields, constituent_fields):
     inp = [
-        path, features['jets'], features['pf_cands']
+        path, features['jets']['numerical'], features['pf_cands']['numerical']
     ]
     Tout = (
         [tf.int64] + [tf.float32] +
-        [tf.float32] * len(features['jets']) +
-        [tf.float32] * len(features['pf_cands'])
+        [tf.float32] * len(features['jets']['numerical']) +
+        [tf.float32] * len(features['pf_cands']['numerical'])
     )
 
     data = tf.numpy_function(_read_nanoaod, inp=inp, Tout=Tout)
-
-    global_fields = [f'jet_{field}' for field in features['jets']]
-    constituent_fields = [f'pf_cand_{field}' for field in features['pf_cands']]
 
     fields = ['row_lengths'] + ['target'] + global_fields + constituent_fields
 
@@ -67,20 +92,13 @@ def _retrieve_data(path, features):
         # shape from (None,) to (None, 1)
         data[field] = tf.expand_dims(data[field], axis=1)
 
-    globals = tf.concat([data[field] for field in global_fields], axis=1)
-
     for field in constituent_fields:
         # shape from (None,) to (None, None)
         data[field] = tf.RaggedTensor.from_row_lengths(data[field], row_lengths=row_lengths)
         # shape from (None, None) to (None, None, 1)
         data[field] = tf.expand_dims(data[field], axis=2)
 
-    constituents = tf.concat([data[field] for field in constituent_fields], axis=2)
-
-    # mind the order of the inputs when constructing the neural net 
-    inputs = (constituents, globals)
-
-    return (inputs, target)
+    return (data, target)
 
 
 def _read_nanoaod(path, jet_fields, pf_cand_fields):

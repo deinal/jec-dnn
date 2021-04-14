@@ -37,9 +37,9 @@ if __name__ == '__main__':
     with open('config.yaml') as f:
         config = yaml.safe_load(f)
 
-    train, validation, test, test_files = create_datasets(args.indir, config['data'])
+    train_ds, val_ds, test_ds, test_files = create_datasets(args.indir, config['data'])
 
-    train = train.shuffle(100)
+    # train_ds = train_ds.shuffle(100)
 
     num_constituents = len(config['data']['features']['pf_cands'])
     num_globals = len(config['data']['features']['jets'])
@@ -49,9 +49,9 @@ if __name__ == '__main__':
 
     callbacks = get_callbacks(config['callbacks'])
 
-    fit = dnn.fit(train, validation_data=validation, epochs=config['epochs'], callbacks=callbacks)
+    fit = dnn.fit(train_ds, validation_data=val_ds, epochs=config['epochs'], callbacks=callbacks)
 
-    predictions = dnn.predict(test, use_multiprocessing=True, workers=multiprocessing.cpu_count())
+    predictions = dnn.predict(test_ds, use_multiprocessing=True, workers=multiprocessing.cpu_count())
 
     # Save predictions and corresponding test files
     with open(f'{args.outdir}/predictions.pkl', 'wb') as f:

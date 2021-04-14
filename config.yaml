@@ -1,6 +1,3 @@
-indir: sample
-outdir: sample
-
 epochs: 5
 optimizer: adam
 loss: mean_absolute_error
@@ -24,13 +21,17 @@ data:
   test_size: 0.2
   
   features:
-    jets: [
-      pt, area, eta, mass, phi, muEF,
-      hfEmEF, hfHEF, chEmEF, chHEF, neEmEF, neHEF
-    ]
-    gen_jets: [
-      pt, eta, partonFlavour, hadronFlavour
-    ]
-    pf_cands: [
-      d0, d0Err, dz, dzErr, eta, mass, phi, pt
-    ]
+    jets: 
+      numerical: [
+        pt, eta #, mass, phi, area, qgl_axis2, qgl_ptD
+      ]
+      categorical: [
+        qgl_mult
+      ]
+    pf_cands: 
+      numerical: [
+        pt, eta #, mass, phi, d0, d0Err, dz, dzErr, puppiWeight, puppiWeightNoLep, trkChi2, vtxChi2
+      ]
+      categorical: [
+        charge, lostInnerHits, pdgId, pvAssocQuality, trkQuality
+      ]
