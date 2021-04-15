@@ -14,11 +14,11 @@ Start by editing `config.yaml` to your liking.
 ### Training
 
 ```
-python train.py
+python train.py -i data/sample -o results/sample --gpus 1 3
 ```
 
 ### Plot results
 
 ```
-python plot.py
+python plot.py -i results/sample -o fig/sample
 ```

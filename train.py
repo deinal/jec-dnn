@@ -27,7 +27,10 @@ if __name__ == '__main__':
     arg_parser = argparse.ArgumentParser(description=__doc__)
     arg_parser.add_argument('-i', '--indir', required=True, help='Directory containing jet data')
     arg_parser.add_argument('-o', '--outdir', required=True, help='Where to store outputs')
+    arg_parser.add_argument('--gpus', nargs='+', required=True, help='GPUs to run on in the form 0 1 etc.')
     args = arg_parser.parse_args()
+
+    os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(args.gpus)
 
     try:
         os.mkdir(f'{args.outdir}')
@@ -45,8 +48,10 @@ if __name__ == '__main__':
     num_constituents = len(features['pf_cands']['numerical']) + len(sum(features['pf_cands']['categorical'].values(), []))
     num_globals = len(features['jets']['numerical']) + len(sum(features['jets']['categorical'].values(), []))
 
-    dnn = get_model(num_constituents, num_globals, config['model'])
-    dnn.compile(optimizer=config['optimizer'], loss=config['loss'])
+    strategy = tf.distribute.MirroredStrategy()
+    with strategy.scope():
+        dnn = get_model(num_constituents, num_globals, config['model'])
+        dnn.compile(optimizer=config['optimizer'], loss=config['loss'])
 
     callbacks = get_callbacks(config['callbacks'])
 
