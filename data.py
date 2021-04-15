@@ -1,9 +1,10 @@
 import glob
 import warnings
 import tensorflow as tf
-import awkward as ak
-from coffea.nanoevents import NanoEventsFactory, PFNanoAODSchema
 import tensorflow_transform as tft
+import awkward as ak
+import numpy as np
+from coffea.nanoevents import NanoEventsFactory, PFNanoAODSchema
 
 
 def create_datasets(indir, config):
@@ -24,18 +25,20 @@ def create_datasets(indir, config):
 
 
 def _create_dataset(files, features, batch_size):
-    global_fields = [f'jet_{field}' for field in features['jets']['numerical']]
-    constituent_fields = [f'pf_cand_{field}' for field in features['pf_cands']['numerical']]
+    global_numerical = features['jets']['numerical']
+    global_categorical = features['jets']['categorical']
+    constituent_numerical = features['pf_cands']['numerical']
+    constituent_categorical = features['pf_cands']['categorical']
 
     dataset = tf.data.Dataset.from_tensor_slices(files)
 
     dataset = dataset.map(
-        lambda path: _retrieve_data(path, features, global_fields, constituent_fields),
+        lambda path: _retrieve_data(path, global_numerical, list(global_categorical.keys()), constituent_numerical, list(constituent_categorical.keys())),
         num_parallel_calls=tf.data.experimental.AUTOTUNE,
     )
 
     dataset = dataset.map(
-        lambda data, target: (_preprocess(data, global_fields, constituent_fields), target),
+        lambda data, target: (_preprocess(data, global_numerical, global_categorical, constituent_numerical, constituent_categorical), target),
         num_parallel_calls=tf.data.experimental.AUTOTUNE,
     )
 
@@ -46,36 +49,76 @@ def _create_dataset(files, features, batch_size):
     return dataset
 
 
-def _preprocess(data, global_fields, constituent_fields):
-    for field in constituent_fields:
-        flat_constituent = data[field].flat_values
+def _preprocess(data, global_numerical, global_categorical, constituent_numerical, constituent_categorical):
+    for field in global_numerical:
+        name = f'jet_{field}'
+        data[name] = tft.scale_to_gaussian(data[name])
+
+    for field in constituent_numerical:
+        name = f'pf_cand_{field}'
+        flat_constituent = data[name].flat_values
         normalized_constituent = tft.scale_to_gaussian(flat_constituent)
-        data[field] = tf.RaggedTensor.from_row_splits(normalized_constituent, data[field].row_splits)
-
-    for field in global_fields:
-        data[field] = tft.scale_to_gaussian(data[field])
+        data[name] = tf.RaggedTensor.from_row_splits(normalized_constituent, data[name].row_splits)
     
-    constituents = tf.concat([data[field] for field in constituent_fields], axis=2)
+    for field in global_categorical:
+        name = f'jet_{field}'
+        categories = global_categorical[field]
+        encoded_feature = _one_hot_encode(data[name], categories)
+        data[name] = tf.squeeze(encoded_feature, axis=1) # remove excess dimension created by tf.one_hot
 
-    globals = tf.concat([data[field] for field in global_fields], axis=1)
+    for field in constituent_categorical:
+        name = f'pf_cand_{field}'
+        categories = constituent_categorical[field]
+        encoded_feature = _one_hot_encode(data[name], categories)
+        data[name] = tf.squeeze(encoded_feature, axis=2) # remove excess dimension created by tf.one_hot
 
+    globals = tf.concat([data[f'jet_{field}'] for field in global_numerical + list(global_categorical.keys())], axis=1)
+    constituents = tf.concat([data[f'pf_cand_{field}'] for field in constituent_numerical + list(constituent_categorical.keys())], axis=2)
+    
     # mind the order of the inputs when constructing the neural net 
     inputs = (constituents, globals)
 
     return inputs
 
 
-def _retrieve_data(path, features, global_fields, constituent_fields):
+def _one_hot_encode(feature, categories):
+    cardinality = len(categories)
+    keys_tensor = tf.constant(categories)
+    vals_tensor = tf.range(cardinality)
+    
+    table = tf.lookup.StaticHashTable(
+        tf.lookup.KeyValueTensorInitializer(keys_tensor, vals_tensor),
+        default_value=-1
+    )
+
+    # Map integer categories to an ordered list e.g. charge from [-1, 0, 1] to [0, 1, 2]
+    tf.map_fn(lambda x: table.lookup(x), feature)
+
+    # One-hot encode categories to orthogonal vectors e.g. [0, 1, 2] to [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+    return tf.one_hot(feature, depth=cardinality)
+
+
+def _retrieve_data(path, global_numerical, global_categorical, constituent_numerical, constituent_categorical):
     inp = [
-        path, features['jets']['numerical'], features['pf_cands']['numerical']
+        path, global_numerical, global_categorical, 
+        constituent_numerical, constituent_categorical
     ]
     Tout = (
-        [tf.int64] + [tf.float32] +
-        [tf.float32] * len(features['jets']['numerical']) +
-        [tf.float32] * len(features['pf_cands']['numerical'])
+        [tf.int32] + [tf.float32] +
+        [tf.float32] * len(global_numerical) +
+        [tf.int32] * len(global_categorical) +
+        [tf.float32] * len(constituent_numerical) +
+        [tf.int32] * len(constituent_categorical)
     )
 
     data = tf.numpy_function(_read_nanoaod, inp=inp, Tout=Tout)
+
+    global_fields = [
+        f'jet_{field}' for field in global_numerical + global_categorical
+    ]
+    constituent_fields = [
+        f'pf_cand_{field}' for field in constituent_numerical + constituent_categorical
+    ]
 
     fields = ['row_lengths'] + ['target'] + global_fields + constituent_fields
 
@@ -101,11 +144,13 @@ def _retrieve_data(path, features, global_fields, constituent_fields):
     return (data, target)
 
 
-def _read_nanoaod(path, jet_fields, pf_cand_fields):
+def _read_nanoaod(path, global_numerical, global_categorical, constituent_numerical, constituent_categorical):
     # Decode bytestrings
     path = path.decode()
-    jet_fields = [field.decode() for field in jet_fields]
-    pf_cand_fields = [field.decode() for field in pf_cand_fields]
+    global_numerical = [field.decode() for field in global_numerical]
+    global_categorical = [field.decode() for field in global_categorical]
+    constituent_numerical = [field.decode() for field in constituent_numerical]
+    constituent_categorical = [field.decode() for field in constituent_categorical]
 
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore', message='Found duplicate branch')
@@ -124,19 +169,25 @@ def _read_nanoaod(path, jet_fields, pf_cand_fields):
 
     target = valid_jets.matched_gen.pt / valid_jets.pt
 
-    globals = valid_jets[jet_fields]
+    globals = valid_jets[global_numerical + global_categorical]
 
-    constituents = valid_jets.constituents.pf[pf_cand_fields]
+    constituents = valid_jets.constituents.pf[constituent_numerical + constituent_categorical]
     row_lengths = ak.num(constituents, axis=1)
     flat_constituents = ak.flatten(constituents, axis=1)
 
     # Construct a list of numpy arrays with the desired data
-    data = [ak.to_numpy(row_lengths)] + [ak.to_numpy(target)]
+    data = [ak.to_numpy(row_lengths).astype(np.int32)] + [ak.to_numpy(target).astype(np.float32)]
 
-    for field in jet_fields:
-        data.append(ak.to_numpy(globals[field]))
+    for field in global_numerical:
+        data.append(ak.to_numpy(globals[field]).astype(np.float32))
 
-    for field in pf_cand_fields:
-        data.append(ak.to_numpy(flat_constituents[field]))
+    for field in global_categorical:
+        data.append(ak.to_numpy(globals[field]).astype(np.int32))
+
+    for field in constituent_numerical:
+        data.append(ak.to_numpy(flat_constituents[field]).astype(np.float32))
+
+    for field in constituent_categorical:
+        data.append(ak.to_numpy(flat_constituents[field]).astype(np.int32))
 
     return data

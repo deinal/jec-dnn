@@ -1,3 +1,4 @@
+import os
 import argparse
 import warnings
 import pickle
@@ -6,6 +7,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from coffea.nanoevents import NanoEventsFactory, PFNanoAODSchema
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+os.environ['CUDA_VISIBLE_DEVICES'] = ''
 from tensorflow import keras
 
 
@@ -109,6 +112,11 @@ if __name__ == '__main__':
     arg_parser.add_argument('-i', '--indir', required=True, help='Directory with dnn training results')
     arg_parser.add_argument('-o', '--outdir', required=True, help='Where to store plots')
     args = arg_parser.parse_args()
+
+    try:
+        os.mkdir(f'{args.outdir}')
+    except FileExistsError:
+        pass
 
     dnn = keras.models.load_model(f'{args.indir}/dnn')
 

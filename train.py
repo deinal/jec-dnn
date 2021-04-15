@@ -39,10 +39,11 @@ if __name__ == '__main__':
 
     train_ds, val_ds, test_ds, test_files = create_datasets(args.indir, config['data'])
 
-    # train_ds = train_ds.shuffle(100)
+    train_ds = train_ds.shuffle(100)
 
-    num_constituents = len(config['data']['features']['pf_cands'])
-    num_globals = len(config['data']['features']['jets'])
+    features = config['data']['features']
+    num_constituents = len(features['pf_cands']['numerical']) + len(sum(features['pf_cands']['categorical'].values(), []))
+    num_globals = len(features['jets']['numerical']) + len(sum(features['jets']['categorical'].values(), []))
 
     dnn = get_model(num_constituents, num_globals, config['model'])
     dnn.compile(optimizer=config['optimizer'], loss=config['loss'])

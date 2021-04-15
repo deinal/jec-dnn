@@ -1,4 +1,4 @@
-epochs: 5
+epochs: 20
 optimizer: adam
 loss: mean_absolute_error
 
@@ -23,15 +23,17 @@ data:
   features:
     jets: 
       numerical: [
-        pt, eta #, mass, phi, area, qgl_axis2, qgl_ptD
+        pt, eta, mass, phi, area, qgl_axis2, qgl_ptD
       ]
-      categorical: [
-        qgl_mult
-      ]
+      categorical: {
+        puId: [0, 4, 6, 7]
+      }
     pf_cands: 
       numerical: [
-        pt, eta #, mass, phi, d0, d0Err, dz, dzErr, puppiWeight, puppiWeightNoLep, trkChi2, vtxChi2
+        pt, eta, mass, phi, d0, d0Err, dz, dzErr, puppiWeight, puppiWeightNoLep, trkChi2, vtxChi2
       ]
-      categorical: [
-        charge, lostInnerHits, pdgId, pvAssocQuality, trkQuality
-      ]
+      categorical: {
+        charge: [-1, 0, 1], lostInnerHits: [-1, 0, 1, 2], 
+        pdgId: [-211, -13, -11, 1, 2, 11, 13, 22, 130, 211], 
+        pvAssocQuality: [0, 1, 4, 5, 6, 7], trkQuality: [0, 1, 5]
+      }
