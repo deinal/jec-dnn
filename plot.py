@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from coffea.nanoevents import NanoEventsFactory, PFNanoAODSchema
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 os.environ['CUDA_VISIBLE_DEVICES'] = ''
 from tensorflow import keras
 
@@ -28,12 +28,12 @@ def read_data(paths, predictions):
 
         selected_jets = leading_jets[(leading_jets.matched_gen.pt > 30) & (abs(leading_jets.matched_gen.eta) < 2.5)]
 
-        leading_jets = selected_jets[~ak.is_none(selected_jets.matched_gen.pt)]
+        valid_jets = selected_jets[~ak.is_none(selected_jets.matched_gen.pt)]
 
-        jet_pt = ak.to_pandas(leading_jets.pt)
-        gen_jet_pt = ak.to_pandas(leading_jets.matched_gen.pt)
-        parton_flavour = ak.to_pandas(leading_jets.matched_gen.partonFlavour)
-        hadron_flavour = ak.to_pandas(leading_jets.matched_gen.hadronFlavour)
+        jet_pt = ak.to_pandas(valid_jets.pt)
+        gen_jet_pt = ak.to_pandas(valid_jets.matched_gen.pt)
+        parton_flavour = ak.to_pandas(valid_jets.matched_gen.partonFlavour)
+        hadron_flavour = ak.to_pandas(valid_jets.matched_gen.hadronFlavour)
 
         df = pd.concat((jet_pt, gen_jet_pt, parton_flavour, hadron_flavour), axis=1)
         df.columns = ['Jet_pt', 'GenJet_pt', 'GenJet_partonFlavour', 'GenJet_hadronFlavour']
@@ -107,6 +107,53 @@ def plot_mean_response(outdir, df, flavour):
     fig.savefig(f'{outdir}/{flavour}_mean_response.pdf')
 
 
+def plot_mean_residual(outdir, df, flavour_1, flavour_2):
+    binning = np.geomspace(30, 3000, 20)
+    bin_centers = np.sqrt(binning[:-1] * binning[1:])
+
+    df1 = df[df.flavour.isin(flavour_1[1])]
+    bins_1 = df1.groupby(pd.cut(df1.GenJet_pt, binning))
+    response_mean_1 = bins_1.response.mean()
+    response_std_1 = bins_1.response.std()
+    dnn_response_mean_1 = bins_1.dnn_response.mean() 
+    dnn_response_std_1 = bins_1.dnn_response.std()
+
+    df2 = df[df.flavour.isin(flavour_2[1])]
+    bins_2 = df2.groupby(pd.cut(df2.GenJet_pt, binning))
+    response_mean_2 = bins_2.response.mean()
+    response_std_2 = bins_2.response.std()
+    dnn_response_mean_2 = bins_2.dnn_response.mean() 
+    dnn_response_std_2 = bins_2.dnn_response.std()
+
+    
+    dnn_response_mean_diff = dnn_response_mean_1 - dnn_response_mean_2
+    dnn_err = np.sqrt(dnn_response_std_1 ** 2 + dnn_response_std_2 ** 2)
+    response_mean_diff = response_mean_1 - response_mean_2
+    err = np.sqrt(response_std_1 ** 2 + response_std_2 ** 2)
+
+    fig, ax = plt.subplots(
+        nrows=2, ncols=1, sharex=True, figsize=(10, 6),
+        gridspec_kw={'height_ratios': [2, 1], 'hspace': 0.1}
+    )
+    fig.suptitle('Mean response residuals w.r.t. gen p$_{T}$')
+
+    ax[0].errorbar(bin_centers, dnn_response_mean_diff, yerr=dnn_err, ms=4, fmt='o', alpha=.7, capsize=3, capthick=1, label='DNN')
+    ax[0].fill_between(bin_centers, dnn_response_mean_diff - dnn_err, dnn_response_mean_diff + dnn_err, alpha=.2)
+    ax[0].errorbar(bin_centers, response_mean_diff, yerr=err, ms=4, fmt='o', alpha=.7, capsize=3, capthick=1, label='Standard')
+    ax[0].fill_between(bin_centers, response_mean_diff - err, response_mean_diff + err, alpha=.2)
+    ax[0].axhline(0, ls='dashed', c='gray', alpha=.7)
+    ax[0].set_ylabel('Jets/bin')
+    ax[0].set_ylabel('R$_{' + flavour_1[0] + '}$-R$_{' + flavour_2[0] + '}$')
+    ax[0].legend()
+
+    ax[1].hist(df.GenJet_pt, bins=binning, alpha=.7)
+    ax[1].set_xscale('log')
+    ax[1].set_ylabel('Jets/bin')
+    ax[1].set_xlabel('gen p$_{T}$')
+
+    fig.savefig(f'{outdir}/{flavour_1[0]}_{flavour_2[0]}_mean_residual.pdf')
+
+
 if __name__ == '__main__':
     arg_parser = argparse.ArgumentParser(description=__doc__)
     arg_parser.add_argument('-i', '--indir', required=True, help='Directory with dnn training results')
@@ -136,3 +183,5 @@ if __name__ == '__main__':
         ('uds', {1, 2, 3}), ('b', {5}), ('g', {21}), ('all', {0, 1, 2, 3, 4, 5, 21})
     ]:
         plot_mean_response(args.outdir, df[df.flavour.isin(ids)], flavour)
+
+    plot_mean_residual(args.outdir, df, ('g', {21}), ('uds', {1, 2, 3}))
