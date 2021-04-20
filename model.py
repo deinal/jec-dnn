@@ -35,6 +35,8 @@ def get_model(num_features, num_globals, config):
 
     model = Model(inputs=[constituents, globals], outputs=outputs, name='dnn')
 
+    model.summary()
+
     for layer in model.layers:
         if isinstance(layer, TimeDistributed):
             layer.layer.summary()
@@ -44,7 +46,7 @@ def get_model(num_features, num_globals, config):
 
 def _mlp(x, config, name):
     for i, units in enumerate(config['layers'], start=1):
-        x = Dense(units, kernel_initializer=config['initializer'], use_bias=True, name=f'{name}_dense_{i}')(x)
+        x = Dense(units, kernel_initializer=config['initializer'], name=f'{name}_dense_{i}')(x)
         x = BatchNormalization(name=f'{name}_batch_normalization_{i}')(x)
         x = Activation(config['activation'], name=f'{name}_activation_{i}')(x)
         x = Dropout(config['dropout'], name=f'{name}_dropout_{i}')(x)

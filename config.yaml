@@ -1,6 +1,8 @@
 epochs: 20
-optimizer: adam
 loss: mean_absolute_error
+optimizer: adam
+lr: 1.e-3
+shuffle_buffer: 64
 
 callbacks:
   min_delta: 1.e-4
@@ -12,10 +14,10 @@ model:
   layers: [100, 100, 100]
   activation: relu
   initializer: he_uniform
-  dropout: 0.1
+  dropout: 0.2
 
 data:
-  batch_size: 400
+  batch_size: 256
   train_size: 0.6
   validation_size: 0.2
   test_size: 0.2
@@ -23,10 +25,10 @@ data:
   features:
     jets: 
       numerical: [
-        pt, eta, mass, phi, area, qgl_axis2, qgl_ptD
+        pt, eta, mass, phi, area, qgl_axis2, qgl_ptD, qgl_mult
       ]
       categorical: {
-        puId: [0, 4, 6, 7]
+        puId: [0, 4, 6, 7], partonFlavour: [-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 21]
       }
     pf_cands: 
       numerical: [
@@ -37,3 +39,6 @@ data:
         pdgId: [-211, -13, -11, 1, 2, 11, 13, 22, 130, 211], 
         pvAssocQuality: [0, 1, 4, 5, 6, 7], trkQuality: [0, 1, 5]
       }
+      synthetic: [
+       rel_pt, rel_eta, rel_mass, rel_phi
+      ]

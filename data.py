@@ -29,17 +29,25 @@ def _create_dataset(files, features, batch_size):
     global_categorical = features['jets']['categorical']
     constituent_numerical = features['pf_cands']['numerical']
     constituent_categorical = features['pf_cands']['categorical']
+    constituent_synthetic = features['pf_cands']['synthetic']
 
     dataset = tf.data.Dataset.from_tensor_slices(files)
 
     dataset = dataset.map(
-        lambda path: _retrieve_data(path, global_numerical, list(global_categorical.keys()), constituent_numerical, list(constituent_categorical.keys())),
-        num_parallel_calls=tf.data.experimental.AUTOTUNE,
+        lambda path: _retrieve_data(
+            path, global_numerical, list(global_categorical.keys()), constituent_numerical, list(constituent_categorical.keys())
+        ),
+        num_parallel_calls=4 # a fixed number instead of tf.data.experimental.AUTOTUNE limits the RAM usage
     )
 
+    global_tables = _create_category_tables(global_categorical)
+    constituent_tables = _create_category_tables(constituent_categorical)
+
     dataset = dataset.map(
-        lambda data, target: (_preprocess(data, global_numerical, global_categorical, constituent_numerical, constituent_categorical), target),
-        num_parallel_calls=tf.data.experimental.AUTOTUNE,
+        lambda data, target: (_preprocess(
+            data, global_tables, constituent_tables, global_numerical, global_categorical, constituent_numerical, constituent_categorical, constituent_synthetic), target
+        ),
+        num_parallel_calls=tf.data.experimental.AUTOTUNE
     )
 
     dataset = dataset.unbatch().batch(batch_size)
@@ -49,12 +57,29 @@ def _create_dataset(files, features, batch_size):
     return dataset
 
 
-def _preprocess(data, global_numerical, global_categorical, constituent_numerical, constituent_categorical):
+def _preprocess(data, global_tables, constituent_tables, global_numerical, global_categorical, constituent_numerical, constituent_categorical, constituent_synthetic):
+    if 'rel_pt' in constituent_synthetic:
+        data['pf_cand_rel_pt'] = data['pf_cand_pt'] / tf.expand_dims(data['jet_pt'], axis=1)
+
+    if 'rel_mass' in constituent_synthetic:
+        data['pf_cand_rel_mass'] = data['pf_cand_mass'] / tf.expand_dims(data['jet_mass'], axis=1)
+
+    if 'rel_eta' in constituent_synthetic:
+        jet_eta = tf.expand_dims(data['jet_eta'], axis=1)
+        data['pf_cand_rel_eta'] = (data['pf_cand_eta'] - jet_eta) * tf.math.sign(jet_eta)
+
+    if 'rel_phi' in constituent_synthetic:
+        phi_diff = data['pf_cand_phi'] - tf.expand_dims(data['jet_phi'], axis=1)
+        phi_diff = phi_diff.flat_values
+        phi_diff = tf.where(phi_diff > np.pi, phi_diff - 2 * np.pi, phi_diff)
+        phi_diff = tf.where(phi_diff < -np.pi, phi_diff + 2 * np.pi, phi_diff)
+        data['pf_cand_rel_phi'] = tf.RaggedTensor.from_row_splits(phi_diff, data['pf_cand_phi'].row_splits)
+
     for field in global_numerical:
         name = f'jet_{field}'
         data[name] = tft.scale_to_gaussian(data[name])
 
-    for field in constituent_numerical:
+    for field in constituent_numerical + constituent_synthetic:
         name = f'pf_cand_{field}'
         flat_constituent = data[name].flat_values
         normalized_constituent = tft.scale_to_gaussian(flat_constituent)
@@ -63,17 +88,21 @@ def _preprocess(data, global_numerical, global_categorical, constituent_numerica
     for field in global_categorical:
         name = f'jet_{field}'
         categories = global_categorical[field]
-        encoded_feature = _one_hot_encode(data[name], categories)
+        encoded_feature = _one_hot_encode(data[name], global_tables[field], categories)
         data[name] = tf.squeeze(encoded_feature, axis=1) # remove excess dimension created by tf.one_hot
 
     for field in constituent_categorical:
         name = f'pf_cand_{field}'
         categories = constituent_categorical[field]
-        encoded_feature = _one_hot_encode(data[name], categories)
+        encoded_feature = _one_hot_encode(data[name], constituent_tables[field], categories)
         data[name] = tf.squeeze(encoded_feature, axis=2) # remove excess dimension created by tf.one_hot
 
-    globals = tf.concat([data[f'jet_{field}'] for field in global_numerical + list(global_categorical.keys())], axis=1)
-    constituents = tf.concat([data[f'pf_cand_{field}'] for field in constituent_numerical + list(constituent_categorical.keys())], axis=2)
+    globals = tf.concat(
+        [data[f'jet_{field}'] for field in global_numerical + list(global_categorical.keys())], axis=1
+    )
+    constituents = tf.concat(
+        [data[f'pf_cand_{field}'] for field in constituent_numerical + list(constituent_categorical.keys()) + constituent_synthetic], axis=2
+    )
     
     # mind the order of the inputs when constructing the neural net 
     inputs = (constituents, globals)
@@ -81,21 +110,31 @@ def _preprocess(data, global_numerical, global_categorical, constituent_numerica
     return inputs
 
 
-def _one_hot_encode(feature, categories):
+def _one_hot_encode(feature, table, categories):
     cardinality = len(categories)
-    keys_tensor = tf.constant(categories)
-    vals_tensor = tf.range(cardinality)
-    
-    table = tf.lookup.StaticHashTable(
-        tf.lookup.KeyValueTensorInitializer(keys_tensor, vals_tensor),
-        default_value=-1
-    )
 
-    # Map integer categories to an ordered list e.g. charge from [-1, 0, 1] to [0, 1, 2]
-    tf.map_fn(lambda x: table.lookup(x), feature)
+    # # Map integer categories to an ordered list e.g. charge from [-1, 0, 1] to [0, 1, 2]
+    feature = tf.ragged.map_flat_values(lambda x: table.lookup(x), feature)
 
     # One-hot encode categories to orthogonal vectors e.g. [0, 1, 2] to [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
-    return tf.one_hot(feature, depth=cardinality)
+    return tf.one_hot(tf.cast(feature, tf.int32), depth=cardinality, dtype=tf.float32)
+
+
+def _create_category_tables(feature):
+    tables = {}
+
+    for field in feature:
+        keys_tensor = tf.constant(feature[field])
+        vals_tensor = tf.range(len(feature[field]))
+
+        table = tf.lookup.StaticHashTable(
+            tf.lookup.KeyValueTensorInitializer(keys_tensor, vals_tensor),
+            default_value=-1
+        )
+
+        tables[field] = table
+
+    return tables
 
 
 def _retrieve_data(path, global_numerical, global_categorical, constituent_numerical, constituent_categorical):
@@ -153,8 +192,8 @@ def _read_nanoaod(path, global_numerical, global_categorical, constituent_numeri
     constituent_categorical = [field.decode() for field in constituent_categorical]
 
     with warnings.catch_warnings():
-        warnings.filterwarnings('ignore', message='Found duplicate branch')
-        warnings.filterwarnings('ignore', message='Missing cross-reference index')
+        warnings.filterwarnings('ignore', message='found duplicate branch')
+        warnings.filterwarnings('ignore', message='missing cross-reference index')
         events = NanoEventsFactory.from_root(path, schemaclass=PFNanoAODSchema).events()
 
     jets = events.Jet[(ak.count(events.Jet.matched_gen.pt, axis=1) >= 2)]

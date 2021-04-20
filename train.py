@@ -1,9 +1,9 @@
 import os
+import shutil
 import tensorflow as tf
 import argparse
 import pickle
 import yaml
-import multiprocessing
 from model import get_model
 from data import create_datasets
 
@@ -33,31 +33,34 @@ if __name__ == '__main__':
     os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(args.gpus)
 
     try:
-        os.mkdir(f'{args.outdir}')
+        os.mkdir(args.outdir)
     except FileExistsError:
         pass
 
     with open('config.yaml') as f:
         config = yaml.safe_load(f)
 
+    shutil.copyfile('config.yaml', f'{args.outdir}/config.yaml')
+
     train_ds, val_ds, test_ds, test_files = create_datasets(args.indir, config['data'])
 
-    train_ds = train_ds.shuffle(100)
+    train_ds = train_ds.shuffle(config['shuffle_buffer'])
 
     features = config['data']['features']
-    num_constituents = len(features['pf_cands']['numerical']) + len(sum(features['pf_cands']['categorical'].values(), []))
+    num_constituents = len(features['pf_cands']['numerical']) + len(sum(features['pf_cands']['categorical'].values(), [])) + len(features['pf_cands']['synthetic'])
     num_globals = len(features['jets']['numerical']) + len(sum(features['jets']['categorical'].values(), []))
 
     strategy = tf.distribute.MirroredStrategy()
     with strategy.scope():
         dnn = get_model(num_constituents, num_globals, config['model'])
         dnn.compile(optimizer=config['optimizer'], loss=config['loss'])
+        dnn.optimizer.lr.assign(config['lr'])
 
     callbacks = get_callbacks(config['callbacks'])
 
     fit = dnn.fit(train_ds, validation_data=val_ds, epochs=config['epochs'], callbacks=callbacks)
 
-    predictions = dnn.predict(test_ds, use_multiprocessing=True, workers=multiprocessing.cpu_count())
+    predictions = dnn.predict(test_ds, use_multiprocessing=True, workers=os.cpu_count()-1)
 
     # Save predictions and corresponding test files
     with open(f'{args.outdir}/predictions.pkl', 'wb') as f:
