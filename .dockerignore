@@ -1,0 +1,11 @@
+**/__pycache__
+**/.ipynb_checkpoints
+/data
+/results
+/trashcan
+/.git
+/.vscode
+Dockerfile
+README.md
+.dockerignore
+.gitignore
