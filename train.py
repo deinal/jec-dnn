@@ -1,10 +1,12 @@
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import shutil
 import tensorflow as tf
 import argparse
 import pickle
 import yaml
-from model import get_model
+from deepset import get_deepset
+from particle_net import get_particle_net
 from data import create_datasets
 
 
@@ -31,6 +33,7 @@ if __name__ == '__main__':
     args = arg_parser.parse_args()
 
     os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(args.gpus)
+    print('GPU devices:', tf.config.list_physical_devices('GPU'))
 
     try:
         os.mkdir(args.outdir)
@@ -39,22 +42,27 @@ if __name__ == '__main__':
 
     with open('config.yaml') as f:
         config = yaml.safe_load(f)
+        net = config['net']
 
     shutil.copyfile('config.yaml', f'{args.outdir}/config.yaml')
 
-    train_ds, val_ds, test_ds, test_files = create_datasets(args.indir, config['data'])
+    train_ds, val_ds, test_ds, test_files, metadata = create_datasets(net, args.indir, config['data'])
+    num_constituents, num_globals, num_points = metadata
 
     train_ds = train_ds.shuffle(config['shuffle_buffer'])
 
-    features = config['data']['features']
-    num_constituents = len(features['pf_cands']['numerical']) + len(sum(features['pf_cands']['categorical'].values(), [])) + len(features['pf_cands']['synthetic'])
-    num_globals = len(features['jets']['numerical']) + len(sum(features['jets']['categorical'].values(), []))
+   # strategy = tf.distribute.MirroredStrategy()
+   # with strategy.scope():
 
-    strategy = tf.distribute.MirroredStrategy()
-    with strategy.scope():
-        dnn = get_model(num_constituents, num_globals, config['model'])
-        dnn.compile(optimizer=config['optimizer'], loss=config['loss'])
-        dnn.optimizer.lr.assign(config['lr'])
+    if net == 'deepset':
+        dnn = get_deepset(num_constituents, num_globals, config['model']['deepset'])
+    if net == 'particlenet':
+        dnn = get_particle_net(num_constituents, num_points, config['model']['particlenet'])
+
+    dnn.compile(optimizer=config['optimizer'], loss=config['loss'])
+    dnn.optimizer.lr.assign(config['lr'])
+
+    tf.keras.utils.plot_model(dnn, f'{args.outdir}/model.png', dpi=100, show_shapes=True, expand_nested=True)
 
     callbacks = get_callbacks(config['callbacks'])
 

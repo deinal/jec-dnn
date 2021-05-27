@@ -7,9 +7,6 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from coffea.nanoevents import NanoEventsFactory, PFNanoAODSchema
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-os.environ['CUDA_VISIBLE_DEVICES'] = ''
-from tensorflow import keras
 
 
 def read_data(paths, predictions):
@@ -54,22 +51,13 @@ def read_data(paths, predictions):
     return df
 
 
-def plot_model(outdir, model):
-    for layer in model.layers:
-        if isinstance(layer, keras.layers.TimeDistributed):
-            keras.utils.plot_model(layer.layer, f'{outdir}/{layer.layer.name}.pdf', dpi=100, show_shapes=True)
-
-    keras.utils.plot_model(model, f'{outdir}/model.pdf', dpi=100, show_shapes=True)
-    keras.utils.plot_model(model, f'{outdir}/full_model.pdf', dpi=100, show_shapes=True, expand_nested=True)
-
-
 def plot_loss(outdir, history):
     plt.plot(history['loss'][1:], label='Training loss')
     plt.plot(history['val_loss'][1:], label='Validation loss')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
     plt.legend()
-    plt.savefig(f'{outdir}/loss.pdf')
+    plt.savefig(f'{outdir}/loss.png')
 
 
 def plot_mean_response(outdir, df, flavour):
@@ -104,7 +92,7 @@ def plot_mean_response(outdir, df, flavour):
     ax[1].set_ylabel('Jets/bin')
     ax[1].set_xlabel('gen p$_{T}$')
 
-    fig.savefig(f'{outdir}/{flavour}_mean_response.pdf')
+    fig.savefig(f'{outdir}/{flavour}_mean_response.png')
 
 
 def plot_mean_residual(outdir, df, flavour_1, flavour_2):
@@ -151,7 +139,7 @@ def plot_mean_residual(outdir, df, flavour_1, flavour_2):
     ax[1].set_ylabel('Jets/bin')
     ax[1].set_xlabel('gen p$_{T}$')
 
-    fig.savefig(f'{outdir}/{flavour_1[0]}_{flavour_2[0]}_mean_residual.pdf')
+    fig.savefig(f'{outdir}/{flavour_1[0]}_{flavour_2[0]}_mean_residual.png')
 
 
 if __name__ == '__main__':
@@ -164,10 +152,6 @@ if __name__ == '__main__':
         os.mkdir(f'{args.outdir}')
     except FileExistsError:
         pass
-
-    dnn = keras.models.load_model(f'{args.indir}/dnn')
-
-    plot_model(args.outdir, dnn)
 
     with open(f'{args.indir}/history.pkl', 'rb') as f:
         history = pickle.load(f)

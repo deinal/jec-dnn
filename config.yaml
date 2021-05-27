@@ -1,26 +1,48 @@
+net: deepset
+
 epochs: 20
+shuffle_buffer: 64
+
 loss: mean_absolute_error
 optimizer: adam
 lr: 1.e-3
-shuffle_buffer: 64
 
 callbacks:
   min_delta: 1.e-4
   patience: 5
-  factor: 0.5
+  factor: 0.2
   min_lr: 1.e-6
 
 model:
-  layers: [100, 100, 100]
-  activation: relu
-  initializer: he_uniform
-  dropout: 0.2
+  deepset:
+    type: resnet # mlp or resnet
+    activation: relu
+    initializer: he_normal
+    dropout: 0.2
+    units: [100, 50, 100, 50]
+
+  particlenet:
+    activation: relu
+    initializer: he_normal
+    batch_norm: True
+    pooling: average # average or max
+    num_points: 100
+    K: 16
+    channels: [
+      [64, 64, 64],
+      [128, 128, 128],
+      [256, 256, 256],
+    ]
+    dropout: 0.1
+    units: [256]
 
 data:
-  batch_size: 256
+  batch_size: 32
   train_size: 0.6
   validation_size: 0.2
   test_size: 0.2
+
+  num_points: 100 # ParticleNet point cutoff
   
   features:
     jets: 
@@ -40,5 +62,5 @@ data:
         pvAssocQuality: [0, 1, 4, 5, 6, 7], trkQuality: [0, 1, 5]
       }
       synthetic: [
-       rel_pt, rel_eta, rel_mass, rel_phi
+        rel_pt, rel_eta, rel_mass, rel_phi
       ]
