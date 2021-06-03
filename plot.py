@@ -212,23 +212,12 @@ def bootstrap(x, num=30):
 
 
 def compute_iqr(groups):
-    """Compute IQR from series GroupBy.
+    """Compute IQR from series GroupBy."""
+    
+    q = groups.quantile([0.25, 0.75])
+    iqr = q[1::2].values - q[0::2].values
 
-    There is a bug in pandas when computing quantiles from a
-    GroupBy [1].
-    [1] https://github.com/pandas-dev/pandas/issues/33200
-    """
-
-    iqr = []
-    for _, series in groups:
-        values = series.to_numpy()
-        if len(values) <= 1:
-            iqr.append(np.nan)
-        else:
-            q = np.quantile(values, [0.25, 0.75])
-            iqr.append(q[1] - q[0])
-    print(iqr)
-    return np.asarray(iqr)
+    return iqr
 
 
 def plot_summary(dataframe, fig_dir):
