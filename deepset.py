@@ -44,9 +44,11 @@ def get_deepset(num_constituents, num_globals, config):
 def _mlp(x, config, name):
     for idx, units in enumerate(config['units'], start=1):
         x = Dense(units, kernel_initializer=config['initializer'], name=f'{name}_dense_{idx}')(x)
-        x = BatchNormalization(name=f'{name}_batch_normalization_{idx}')(x)
+        if config['batch_norm']:
+            x = BatchNormalization(name=f'{name}_batch_normalization_{idx}')(x)
         x = Activation(config['activation'], name=f'{name}_activation_{idx}')(x)
-        x = Dropout(config['dropout'], name=f'{name}_dropout_{idx}')(x)
+        if config['dropout']:
+            x = Dropout(config['dropout'], name=f'{name}_dropout_{idx}')(x)
     return x
 
 

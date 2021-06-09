@@ -10,6 +10,7 @@ class Sum(Layer):
     def call(self, inputs):
         return tf.math.reduce_sum(inputs, axis=self.axis)
 
+
 class Mean(Layer):
     def __init__(self, axis, **kwargs):
         super().__init__(**kwargs)

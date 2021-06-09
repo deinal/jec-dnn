@@ -13,13 +13,15 @@ from data import create_datasets
 def get_callbacks(config):
     # Reduce learning rate when nearing convergence
     reduce_lr_on_plateau = tf.keras.callbacks.ReduceLROnPlateau(
-        monitor='val_loss', factor=config['factor'], patience=config['patience'], min_lr=config['min_lr'],
-        mode='auto', min_delta=config['min_delta'], cooldown=0, verbose=1
+        monitor='val_loss', factor=config['reduce_lr_on_plateau']['factor'], 
+        patience=config['reduce_lr_on_plateau']['patience'], min_lr=config['reduce_lr_on_plateau']['min_lr'],
+        mode='auto', min_delta=config['reduce_lr_on_plateau']['min_delta'], cooldown=0, verbose=1
     )
     # Stop early if the network stops improving
     early_stopping = tf.keras.callbacks.EarlyStopping(
-        monitor='val_loss', min_delta=config['min_delta'], patience=config['patience'], 
-        mode='auto', baseline=None, restore_best_weights=True, verbose=1
+        monitor='val_loss', min_delta=config['early_stopping']['min_delta'], 
+        patience=config['early_stopping']['patience'], mode='auto', baseline=None, 
+        restore_best_weights=True, verbose=1
     )
 
     return [reduce_lr_on_plateau, early_stopping]
@@ -51,16 +53,15 @@ if __name__ == '__main__':
 
     train_ds = train_ds.shuffle(config['shuffle_buffer'])
 
-   # strategy = tf.distribute.MirroredStrategy()
-   # with strategy.scope():
+    strategy = tf.distribute.MirroredStrategy()
+    with strategy.scope():
+        if net == 'deepset':
+            dnn = get_deepset(num_constituents, num_globals, config['model']['deepset'])
+        if net == 'particlenet':
+            dnn = get_particle_net(num_constituents, num_points, num_globals, config['model']['particlenet'])
 
-    if net == 'deepset':
-        dnn = get_deepset(num_constituents, num_globals, config['model']['deepset'])
-    if net == 'particlenet':
-        dnn = get_particle_net(num_constituents, num_points, config['model']['particlenet'])
-
-    dnn.compile(optimizer=config['optimizer'], loss=config['loss'])
-    dnn.optimizer.lr.assign(config['lr'])
+        dnn.compile(optimizer=config['optimizer'], loss=config['loss'])
+        dnn.optimizer.lr.assign(config['lr'])
 
     tf.keras.utils.plot_model(dnn, f'{args.outdir}/model.png', dpi=100, show_shapes=True, expand_nested=True)
 

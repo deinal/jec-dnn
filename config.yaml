@@ -1,25 +1,30 @@
-net: deepset
+net: deepset # deepset or particlenet
 
 epochs: 20
 shuffle_buffer: 64
 
 loss: mean_absolute_error
 optimizer: adam
-lr: 1.e-3
+lr: 2.e-3
 
 callbacks:
-  min_delta: 1.e-4
-  patience: 5
-  factor: 0.2
-  min_lr: 1.e-6
+  reduce_lr_on_plateau:
+    factor: 0.5
+    min_lr: 1.e-8
+    min_delta: 1.e-4
+    patience: 5
+  early_stopping:
+    min_delta: 1.e-4
+    patience: 7
 
 model:
   deepset:
-    type: resnet # mlp or resnet
+    type: mlp # mlp or resnet
     activation: relu
     initializer: he_normal
-    dropout: 0.2
-    units: [100, 50, 100, 50]
+    batch_norm: False
+    dropout: 0
+    units: [256, 256, 256]
 
   particlenet:
     activation: relu
@@ -31,13 +36,13 @@ model:
     channels: [
       [64, 64, 64],
       [128, 128, 128],
-      [256, 256, 256],
+      [256, 256, 256]
     ]
     dropout: 0.1
-    units: [256]
+    units: [256, 128, 64]
 
 data:
-  batch_size: 32
+  batch_size: 256
   train_size: 0.6
   validation_size: 0.2
   test_size: 0.2
@@ -49,18 +54,33 @@ data:
       numerical: [
         pt, eta, mass, phi, area, qgl_axis2, qgl_ptD, qgl_mult
       ]
-      categorical: {
-        puId: [0, 4, 6, 7], partonFlavour: [-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 21]
-      }
+      categorical: [
+        puId, partonFlavour
+      ]
     pf_cands: 
       numerical: [
-        pt, eta, mass, phi, d0, d0Err, dz, dzErr, puppiWeight, puppiWeightNoLep, trkChi2, vtxChi2
+        pt, eta, phi, d0, dz, puppiWeight, puppiWeightNoLep, trkChi2, vtxChi2
       ]
-      categorical: {
-        charge: [-1, 0, 1], lostInnerHits: [-1, 0, 1, 2], 
-        pdgId: [-211, -13, -11, 1, 2, 11, 13, 22, 130, 211], 
-        pvAssocQuality: [0, 1, 4, 5, 6, 7], trkQuality: [0, 1, 5]
-      }
+      categorical: [
+        charge, lostInnerHits, pdgId, pvAssocQuality, trkQuality
+      ]
       synthetic: [
-        rel_pt, rel_eta, rel_mass, rel_phi
+        rel_pt, rel_eta, rel_phi
       ]
+  
+  transforms:
+    numerical:
+      jet_pt: log
+      jet_mass: log
+      pf_cand_pt: log
+      pf_cand_d0: abs
+      pf_cand_dz: abs
+      pf_cand_rel_pt: log
+    categorical:
+      jet_puId: [0, 4, 6, 7]
+      jet_partonFlavour: [-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 21]
+      pf_cand_charge: [-1, 0, 1]
+      pf_cand_lostInnerHits: [-1, 0, 1, 2]
+      pf_cand_pdgId: [-211, -13, -11, 1, 2, 11, 13, 22, 130, 211]
+      pf_cand_pvAssocQuality: [0, 1, 4, 5, 6, 7]
+      pf_cand_trkQuality: [0, 1, 5]      

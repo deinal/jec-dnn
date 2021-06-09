@@ -1,6 +1,5 @@
 import os
 import argparse
-import warnings
 import pickle
 import itertools
 import awkward as ak
@@ -8,34 +7,22 @@ import numpy as np
 import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from coffea.nanoevents import NanoEventsFactory, PFNanoAODSchema
+from data import retrieve_jets
 
 
 def read_data(paths, predictions):
     dfs = []
     for path in paths:
-        with warnings.catch_warnings():
-            warnings.filterwarnings('ignore', message='Found duplicate branch')
-            warnings.filterwarnings('ignore', message='Missing cross-reference index')
-            events = NanoEventsFactory.from_root(path, schemaclass=PFNanoAODSchema).events()
-
-        jets = events.Jet[(ak.count(events.Jet.matched_gen.pt, axis=1) >= 2)]
-
-        sorted_jets = jets[ak.argsort(jets.matched_gen.pt, ascending=False, axis=1)]
-
-        leading_jets = ak.concatenate((sorted_jets[:,0], sorted_jets[:,1]), axis=0)
-
-        selected_jets = leading_jets[(leading_jets.matched_gen.pt > 30) & (abs(leading_jets.matched_gen.eta) < 2.5)]
-
-        valid_jets = selected_jets[~ak.is_none(selected_jets.matched_gen.pt)]
+        valid_jets = retrieve_jets(path)
 
         jet_pt = ak.to_pandas(valid_jets.pt)
         gen_jet_pt = ak.to_pandas(valid_jets.matched_gen.pt)
         parton_flavour = ak.to_pandas(valid_jets.matched_gen.partonFlavour)
         hadron_flavour = ak.to_pandas(valid_jets.matched_gen.hadronFlavour)
+        qgl_axis2 = ak.to_pandas(valid_jets.qgl_axis2)
 
-        df = pd.concat((jet_pt, gen_jet_pt, parton_flavour, hadron_flavour), axis=1)
-        df.columns = ['Jet_pt', 'GenJet_pt', 'GenJet_partonFlavour', 'GenJet_hadronFlavour']
+        df = pd.concat((jet_pt, gen_jet_pt, parton_flavour, hadron_flavour, qgl_axis2), axis=1)
+        df.columns = ['Jet_pt', 'GenJet_pt', 'GenJet_partonFlavour', 'GenJet_hadronFlavour', 'Jet_qgl_axis2']
 
         flavour = df.GenJet_hadronFlavour.where(df.GenJet_hadronFlavour != 0, other=np.abs(df.GenJet_partonFlavour))
         df = df.drop(columns=['GenJet_partonFlavour', 'GenJet_hadronFlavour'])
@@ -56,10 +43,16 @@ def read_data(paths, predictions):
 def plot_loss(history, outdir):
     plt.plot(history['loss'][1:], label='Training loss')
     plt.plot(history['val_loss'][1:], label='Validation loss')
+
+    changes = np.where(np.roll(history['lr'], 1) != history['lr'])[0]
+    ymin, ymax = plt.gca().get_ylim()
+    plt.vlines(changes[1:], ymin=ymin, ymax=ymax, ls='dashed', lw=0.8, colors='gray')
+
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
     plt.legend()
     plt.savefig(f'{outdir}/loss.png')
+    plt.close()
 
 
 def plot_mean_response(df, flavour, outdir):
