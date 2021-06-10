@@ -7,13 +7,13 @@ import numpy as np
 import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from data import retrieve_jets
+from data import read_nanoaod
 
 
 def read_data(paths, predictions):
     dfs = []
     for path in paths:
-        valid_jets = retrieve_jets(path)
+        valid_jets = read_nanoaod(path)
 
         jet_pt = ak.to_pandas(valid_jets.pt)
         gen_jet_pt = ak.to_pandas(valid_jets.matched_gen.pt)

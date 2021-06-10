@@ -50,14 +50,14 @@ data:
   num_points: 100 # ParticleNet point cutoff
   
   features:
-    jets: 
+    jet: 
       numerical: [
         pt, eta, mass, phi, area, qgl_axis2, qgl_ptD, qgl_mult
       ]
       categorical: [
         puId, partonFlavour
       ]
-    pf_cands: 
+    pf: 
       numerical: [
         pt, eta, phi, d0, dz, puppiWeight, puppiWeightNoLep, trkChi2, vtxChi2
       ]
@@ -72,15 +72,15 @@ data:
     numerical:
       jet_pt: log
       jet_mass: log
-      pf_cand_pt: log
-      pf_cand_d0: abs
-      pf_cand_dz: abs
-      pf_cand_rel_pt: log
+      pf_pt: log
+      pf_d0: abs
+      pf_dz: abs
+      pf_rel_pt: log
     categorical:
       jet_puId: [0, 4, 6, 7]
       jet_partonFlavour: [-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 21]
-      pf_cand_charge: [-1, 0, 1]
-      pf_cand_lostInnerHits: [-1, 0, 1, 2]
-      pf_cand_pdgId: [-211, -13, -11, 1, 2, 11, 13, 22, 130, 211]
-      pf_cand_pvAssocQuality: [0, 1, 4, 5, 6, 7]
-      pf_cand_trkQuality: [0, 1, 5]      
+      pf_charge: [-1, 0, 1]
+      pf_lostInnerHits: [-1, 0, 1, 2]
+      pf_pdgId: [-211, -13, -11, 1, 2, 11, 13, 22, 130, 211]
+      pf_pvAssocQuality: [0, 1, 4, 5, 6, 7]
+      pf_trkQuality: [0, 1, 5]      

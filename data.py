@@ -39,15 +39,15 @@ def create_datasets(net, indir, config):
 
 def _get_metadata(features, category_map, num_points):
     num_constituents = sum([
-        len(features['pf_cands']['numerical']),
+        len(features['pf']['numerical']),
         sum([
-            len(category_map[f'pf_cand_{field}']) for field in features['pf_cands']['categorical']
+            len(category_map[f'pf_{field}']) for field in features['pf']['categorical']
         ])
     ])
     num_globals = sum([
-        len(features['jets']['numerical']),
+        len(features['jet']['numerical']),
         sum([
-            len(category_map[f'jet_{field}']) for field in features['jets']['categorical']
+            len(category_map[f'jet_{field}']) for field in features['jet']['categorical']
         ])
     ])
 
@@ -59,8 +59,7 @@ def _create_dataset(net, files, features, batch_size, num_points, transforms):
 
     dataset = dataset.map(
         lambda path: _retrieve_data(
-            net, path, num_points, features['jets']['numerical'], features['jets']['categorical'], 
-            features['pf_cands']['numerical'], features['pf_cands']['categorical']
+            net, path, num_points, features['jet'], features['pf']
         ),
         num_parallel_calls=4 # a fixed number instead of autotune limits the RAM usage
     )
@@ -69,10 +68,7 @@ def _create_dataset(net, files, features, batch_size, num_points, transforms):
 
     dataset = dataset.map(
         lambda data, target: (_preprocess(
-                net, data, tables, transforms, 
-                features['jets']['numerical'], features['jets']['categorical'], 
-                features['pf_cands']['numerical'], features['pf_cands']['categorical'], 
-                features['pf_cands']['synthetic']
+                net, data, tables, transforms, features['jet'], features['pf'].copy()
             ),
             target
         ),
@@ -86,34 +82,27 @@ def _create_dataset(net, files, features, batch_size, num_points, transforms):
     return dataset
 
 
-def _preprocess(
-        net, data, tables, transforms, global_numerical, global_categorical, 
-        constituent_numerical, constituent_categorical, constituent_synthetic
-    ):
-
+def _preprocess(net, data, tables, transforms, jet, pf):
     # Create synthetic features
-    if 'rel_pt' in constituent_synthetic:
-        data['pf_cand_rel_pt'] = data['pf_cand_pt'] / tf.expand_dims(data['jet_pt'], axis=1)
-        constituent_numerical = list(filter(lambda field: field != 'pt', constituent_numerical))
-        data.pop('pf_cand_pt')
+    if 'rel_pt' in pf['synthetic']:
+        data['pf_rel_pt'] = data['pf_pt'] / tf.expand_dims(data['jet_pt'], axis=1)
+        pf['numerical'] = list(filter(lambda field: field != 'pt', pf['numerical']))
 
-    if 'rel_eta' in constituent_synthetic:
+    if 'rel_eta' in pf['synthetic']:
         jet_eta = tf.expand_dims(data['jet_eta'], axis=1)
-        data['pf_cand_rel_eta'] = (data['pf_cand_eta'] - jet_eta) * tf.math.sign(jet_eta)
-        constituent_numerical = list(filter(lambda field: field != 'eta', constituent_numerical))
-        data.pop('pf_cand_eta')
+        data['pf_rel_eta'] = (data['pf_eta'] - jet_eta) * tf.math.sign(jet_eta)
+        pf['numerical'] = list(filter(lambda field: field != 'eta', pf['numerical']))
 
-    if 'rel_phi' in constituent_synthetic:
-        phi_diff = data['pf_cand_phi'] - tf.expand_dims(data['jet_phi'], axis=1)
-        data['pf_cand_rel_phi'] = (phi_diff + math.pi) % (2 * math.pi) - math.pi
-        constituent_numerical = list(filter(lambda field: field != 'phi', constituent_numerical))
-        data.pop('pf_cand_phi')
+    if 'rel_phi' in pf['synthetic']:
+        phi_diff = data['pf_phi'] - tf.expand_dims(data['jet_phi'], axis=1)
+        data['pf_rel_phi'] = (phi_diff + math.pi) % (2 * math.pi) - math.pi
+        pf['numerical'] = list(filter(lambda field: field != 'phi', pf['numerical']))
 
     # Create ParticleNet inputs
     if net == 'particlenet':
-        mask = tf.cast(tf.math.not_equal(data['pf_cand_rel_eta'], 0), dtype=tf.float32) # 1 if valid
+        mask = tf.cast(tf.math.not_equal(data['pf_rel_eta'], 0), dtype=tf.float32) # 1 if valid
         coord_shift = tf.multiply(1e6, tf.cast(tf.math.equal(mask, 0), dtype=tf.float32))
-        points = tf.concat([data['pf_cand_rel_eta'], data['pf_cand_rel_phi']], axis=2)
+        points = tf.concat([data['pf_rel_eta'], data['pf_rel_phi']], axis=2)
 
     # Transform the data
     for name, transform in transforms['numerical'].items():
@@ -130,16 +119,16 @@ def _preprocess(
             encoded_feature = _one_hot_encode(data[name], tables[name], categories)
             if name.startswith('jet'):
                 data[name] = tf.squeeze(encoded_feature, axis=1) # Remove excess dimension created by tf.one_hot
-            if name.startswith('pf_cand'):
+            if name.startswith('pf'):
                 data[name] = tf.squeeze(encoded_feature, axis=2)
 
     # Concatenate the data
     globals = tf.concat(
-        [data[f'jet_{field}'] for field in global_numerical + global_categorical], axis=1
+        [data[f'jet_{field}'] for field in jet['numerical'] + jet['categorical']], axis=1
     )
     constituents = tf.concat(
-        [data[f'pf_cand_{field}'] for field in 
-        constituent_numerical + constituent_categorical + constituent_synthetic], axis=2
+        [data[f'pf_{field}'] for field in 
+        pf['numerical'] + pf['categorical'] + pf['synthetic']], axis=2
     )
     
     # Mind the order of the inputs when constructing the model!
@@ -181,36 +170,32 @@ def _create_category_tables(category_map):
     return tables
 
 
-def _retrieve_data(
-        net, path, num_points, global_numerical, global_categorical, 
-        constituent_numerical, constituent_categorical
-    ):
-
+def _retrieve_data(net, path, num_points, jet, pf):
     global_names = [
-        f'jet_{field}' for field in global_numerical + global_categorical
+        f'jet_{field}' for field in jet['numerical'] + jet['categorical']
     ]
     constituent_names = [
-        f'pf_cand_{field}' for field in constituent_numerical + constituent_categorical
+        f'pf_{field}' for field in pf['numerical'] + pf['categorical']
     ]
     names = ['target'] + global_names + constituent_names
 
     inp = [
-        net, path, num_points, global_numerical, global_categorical, 
-        constituent_numerical, constituent_categorical
+        net, path, num_points, jet['numerical'], jet['categorical'], 
+        pf['numerical'], pf['categorical']
     ]
     Tout = (
         [tf.float32] +
-        [tf.float32] * len(global_numerical) +
-        [tf.int32] * len(global_categorical) +
-        [tf.float32] * len(constituent_numerical) +
-        [tf.int32] * len(constituent_categorical)
+        [tf.float32] * len(jet['numerical']) +
+        [tf.int32] * len(jet['categorical']) +
+        [tf.float32] * len(pf['numerical']) +
+        [tf.int32] * len(pf['categorical'])
     )
 
     if net == 'deepset':
         Tout.append(tf.int32)
         names.append('row_lengths')
 
-    data = tf.numpy_function(_read_nanoaod, inp=inp, Tout=Tout)
+    data = tf.numpy_function(_retrieve_np_data, inp=inp, Tout=Tout)
 
     data = {key: value for key, value in zip(names, data)}
 
@@ -245,11 +230,10 @@ def _retrieve_data(
     return (data, target)
 
 
-def _read_nanoaod(
+def _retrieve_np_data(
         net, path, num_points, global_numerical, global_categorical,
         constituent_numerical, constituent_categorical
     ):
-
     # Decode bytestrings
     net = net.decode()
     path = path.decode()
@@ -258,7 +242,7 @@ def _read_nanoaod(
     constituent_numerical = [field.decode() for field in constituent_numerical]
     constituent_categorical = [field.decode() for field in constituent_categorical]
 
-    valid_jets = retrieve_jets(path)
+    valid_jets = read_nanoaod(path)
 
     target = valid_jets.matched_gen.pt / valid_jets.pt
 
@@ -300,7 +284,7 @@ def _read_nanoaod(
     return data
 
 
-def retrieve_jets(path):
+def read_nanoaod(path):
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore', message='found duplicate branch')
         warnings.filterwarnings('ignore', message='missing cross-reference index')
