@@ -5,7 +5,7 @@ shuffle_buffer: 64
 
 loss: mean_absolute_error
 optimizer: adam
-lr: 2.e-3
+lr: 1.e-3
 
 callbacks:
   reduce_lr_on_plateau:
@@ -59,7 +59,7 @@ data:
       ]
     pf: 
       numerical: [
-        pt, eta, phi, d0, dz, puppiWeight, puppiWeightNoLep, trkChi2, vtxChi2
+        pt, eta, phi, d0, dz
       ]
       categorical: [
         charge, lostInnerHits, pdgId, pvAssocQuality, trkQuality
@@ -72,10 +72,11 @@ data:
     numerical:
       jet_pt: log
       jet_mass: log
-      pf_pt: log
+      jet_qgl_axis2: sqrt
+      jet_qgl_mult: sqrt
       pf_d0: abs
       pf_dz: abs
-      pf_rel_pt: log
+      pf_rel_pt: sqrt
     categorical:
       jet_puId: [0, 4, 6, 7]
       jet_partonFlavour: [-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 21]

@@ -111,6 +111,8 @@ def _preprocess(net, data, tables, transforms, jet, pf):
                 data[name] = tf.math.log(data[name])
             elif transform == 'abs':
                 data[name] = tf.math.abs(data[name])
+            elif transform == 'sqrt':
+                data[name] = tf.math.sqrt(data[name])
             else:
                 raise RuntimeError(f'Unknown transform {transform} for {name}.')
 
