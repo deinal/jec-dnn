@@ -31,7 +31,9 @@ if __name__ == '__main__':
     arg_parser = argparse.ArgumentParser(description=__doc__)
     arg_parser.add_argument('-i', '--indir', required=True, help='Directory containing jet data')
     arg_parser.add_argument('-o', '--outdir', required=True, help='Where to store outputs')
+    arg_parser.add_argument('-c', '--config', required=True, help='Config file')
     arg_parser.add_argument('--gpus', nargs='+', required=True, help='GPUs to run on in the form 0 1 etc.')
+    arg_parser.add_argument('--save-model', action='store_true', help='If model should be saved')
     args = arg_parser.parse_args()
 
     os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(args.gpus)
@@ -42,11 +44,11 @@ if __name__ == '__main__':
     except FileExistsError:
         pass
 
-    with open('config.yaml') as f:
+    with open(args.config) as f:
         config = yaml.safe_load(f)
         net = config['net']
 
-    shutil.copyfile('config.yaml', f'{args.outdir}/config.yaml')
+    shutil.copyfile(args.config, f'{args.outdir}/config.yaml')
 
     train_ds, val_ds, test_ds, test_files, metadata = create_datasets(net, args.indir, config['data'])
     num_constituents, num_globals, num_points = metadata
@@ -80,4 +82,5 @@ if __name__ == '__main__':
         pickle.dump(fit.history, f)
 
     # Save model
-    dnn.save(f'{args.outdir}/dnn')
+    if args.save_model:
+        dnn.save(f'{args.outdir}/dnn')
