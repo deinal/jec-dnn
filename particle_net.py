@@ -94,24 +94,21 @@ def _edge_conv(points, features, num_points, channels, config, name):
     else:
         fts = Mean(axis=2, name=f'{name}_mean')(x) # (N, P, C')
 
-    return Activation(config['activation'], name=f'{name}_activation')(fts) # (N, P, C')
+    if config['shortcut']:
+        sc = Expand(axis=2, name=f'{name}_shortcut_expand')(features)
+        sc = Conv2D(
+            channels[-1], kernel_size=(1, 1), strides=1, data_format='channels_last',
+            use_bias=False if config['batch_norm'] else True, kernel_initializer=config['initializer'], name=f'{name}_shortcut_conv'
+        )(sc)
+        if config['batch_norm']:
+            sc = BatchNormalization(name=f'{name}_shortcut_batchnorm')(sc)
+        sc = Squeeze(axis=2, name=f'{name}_shortcut_squeeze')(sc)
 
-    # shortcut
-    sc = Expand(axis=2, name=f'{name}_shortcut_expand')(features)
-    sc = Conv2D(
-        channels[-1], kernel_size=(1, 1), strides=1, data_format='channels_last',
-        use_bias=False if config['batch_norm'] else True, kernel_initializer=config['initializer'], name=f'{name}_shortcut_conv'
-    )(sc)
-    if config['batch_norm']:
-        sc = BatchNormalization(name=f'{name}_shortcut_batchnorm')(sc)
-    sc = Squeeze(axis=2, name=f'{name}_shortcut_squeeze')(sc)
-
-    x = Add(name=f'{name}_add')([sc, fts])
-
-    if config['activation']:
-        return Activation(config['activation'], name=f'{name}_activation')(x) # (N, P, C')
+        x = Add(name=f'{name}_add')([sc, fts])
     else:
-        return x
+        x = fts
+
+    return Activation(config['activation'], name=f'{name}_activation')(x) # (N, P, C')
 
 
 class KNearestNeighbors(Layer):
