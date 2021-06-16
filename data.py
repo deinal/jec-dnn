@@ -298,7 +298,7 @@ def read_nanoaod(path):
 
     leading_jets = ak.concatenate((sorted_jets[:,0], sorted_jets[:,1]), axis=0)
 
-    selected_jets = leading_jets[(leading_jets.matched_gen.pt > 30) & (abs(leading_jets.matched_gen.eta) < 2.5)]
+    selected_jets = leading_jets[(leading_jets.matched_gen.pt > 30) & (abs(leading_jets.matched_gen.eta) < 5)]
 
     valid_jets = selected_jets[~ak.is_none(selected_jets.matched_gen.pt)]
 
