@@ -5,9 +5,9 @@ import tensorflow as tf
 import argparse
 import pickle
 import yaml
-from deepset import get_deepset
-from particle_net import get_particle_net
-from data import create_datasets
+from src.deepset import get_deepset
+from src.particle_net import get_particle_net
+from src.data import create_datasets
 
 
 def get_callbacks(config):

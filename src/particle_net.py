@@ -1,7 +1,7 @@
 import tensorflow as tf
 from tensorflow.keras import Input, Model
 from tensorflow.keras.layers import Activation, Add, BatchNormalization, Conv2D, Dense, Dropout, Layer, Multiply, Concatenate
-from layers import Mean, Max, Expand, Squeeze
+from src.layers import Mean, Max, Expand, Squeeze
 
 
 def get_particle_net(num_constituents, num_points, num_globals, config):

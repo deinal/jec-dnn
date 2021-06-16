@@ -1,6 +1,6 @@
 from tensorflow.keras import Input, Model
 from tensorflow.keras.layers import Activation, Dense, TimeDistributed, BatchNormalization, Dropout, Concatenate, Add
-from layers import Sum
+from src.layers import Sum
 
 
 def get_deepset(num_constituents, num_globals, config):

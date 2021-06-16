@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from data import read_nanoaod
+from src.data import read_nanoaod
 
 
 def read_data(paths, predictions):
@@ -121,10 +121,22 @@ def plot_mean_residual(outdir, bin_centers, flavour_labels, bins, eta_bin, ieta)
 
     fig.suptitle('Mean response residuals w.r.t. gen p$_{T}$')
 
-    ax.errorbar(bin_centers, dnn_response_mean_diff, yerr=dnn_err, ms=4, fmt='o', alpha=.7, capsize=3, capthick=1, label='DNN')
-    ax.fill_between(bin_centers, dnn_response_mean_diff - dnn_err, dnn_response_mean_diff + dnn_err, alpha=.2)
-    ax.errorbar(bin_centers, response_mean_diff, yerr=err, ms=4, fmt='o', alpha=.7, capsize=3, capthick=1, label='Standard')
-    ax.fill_between(bin_centers, response_mean_diff - err, response_mean_diff + err, alpha=.2)
+    ax.errorbar(
+        bin_centers, dnn_response_mean_diff, yerr=dnn_err, 
+        ms=4, fmt='o', alpha=.7, capsize=3, capthick=1, label='DNN'
+    )
+    ax.fill_between(
+        bin_centers, dnn_response_mean_diff - dnn_err, 
+        dnn_response_mean_diff + dnn_err, alpha=.2
+    )
+    ax.errorbar(
+        bin_centers, response_mean_diff, yerr=err, 
+        ms=4, fmt='o', alpha=.7, capsize=3, capthick=1, label='Standard'
+    )
+    ax.fill_between(
+        bin_centers, response_mean_diff - err, 
+        response_mean_diff + err, alpha=.2
+    )
     ax.axhline(0, ls='dashed', c='gray', alpha=.7)
     ax.set_ylabel('Jets/bin')
     ax.set_ylabel('R$_{' + flavour_labels[0] + '}$-R$_{' + flavour_labels[1] + '}$')
@@ -230,25 +242,25 @@ def plot_summary(fig_dir, flavour_label, bins, binning, bin_centers, eta_bin, ie
     ref_median_error = np.empty_like(ref_median)
     ref_iqr_error = np.empty_like(ref_median)
     for i, (_, df) in enumerate(bins):
-        ref_median_error[i], ref_iqr_error[i] = bootstrap(
-            df.response.to_numpy())
+        ref_median_error[i], ref_iqr_error[i] = bootstrap(df.response.to_numpy())
 
     dnn_median = bins.dnn_response.median().to_numpy()
     dnn_iqr = compute_iqr(bins.dnn_response)
     dnn_median_error = np.empty_like(ref_median)
     dnn_iqr_error = np.empty_like(ref_median)
     for i, (_, df) in enumerate(bins):
-        dnn_median_error[i], dnn_iqr_error[i] = bootstrap(
-            df.dnn_response.to_numpy())
+        dnn_median_error[i], dnn_iqr_error[i] = bootstrap(df.dnn_response.to_numpy())
 
     fig = plt.figure()
     axes = fig.add_subplot()
     axes.errorbar(
         bin_centers, ref_median, yerr=ref_median_error,
-        marker='o', lw=0, elinewidth=0.8, label='Standard')
+        ms=4, marker='o', lw=0, elinewidth=0.8, label='Standard'
+    )
     axes.errorbar(
         bin_centers, dnn_median, yerr=dnn_median_error,
-        marker='o', lw=0, elinewidth=0.8, label='DNN')
+        ms=4, marker='o', lw=0, elinewidth=0.8, label='DNN'
+    )
     axes.axhline(1., ls='dashed', lw=0.8, c='gray')
     axes.set_xlim(binning[0], binning[-1])
     axes.set_xscale('log')
@@ -274,13 +286,13 @@ def plot_summary(fig_dir, flavour_label, bins, binning, bin_centers, eta_bin, ie
 
     axes_upper.errorbar(
         bin_centers, ref_iqr / ref_median, yerr=ref_iqr_error / ref_median,
-        marker='o', lw=0, elinewidth=0.8, label='Standard')
+        ms=4, marker='o', lw=0, elinewidth=0.8, label='Standard')
     axes_upper.errorbar(
         bin_centers, dnn_iqr / dnn_median, yerr=dnn_iqr_error / dnn_median,
-        marker='o', lw=0, elinewidth=0.8, label='DNN')
+        ms=4, marker='o', lw=0, elinewidth=0.8, label='DNN')
     axes_lower.plot(
         bin_centers, (dnn_iqr / dnn_median) / (ref_iqr / ref_median),
-        marker='o', lw=0, color='black')
+        ms=4, marker='o', lw=0, color='black')
 
     axes_upper.set_ylim(0., None)
     axes_lower.set_ylim(0.85, 1.02)
