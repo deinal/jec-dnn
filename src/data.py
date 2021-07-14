@@ -1,3 +1,4 @@
+import os
 import glob
 import warnings
 import tensorflow as tf
@@ -8,7 +9,7 @@ from coffea.nanoevents import NanoEventsFactory, PFNanoAODSchema
 
 
 def create_datasets(net, indir, config):
-    root_paths = glob.glob(f'{indir}/*.root')
+    root_paths = glob.glob(os.path.join(indir, '*.root'))
     num_files = len(root_paths)
     train_split = int(config['train_size'] * num_files)
     test_split = int(config['test_size'] * num_files) + train_split

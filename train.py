@@ -40,7 +40,7 @@ if __name__ == '__main__':
     print('GPU devices:', tf.config.list_physical_devices('GPU'))
 
     try:
-        os.mkdir(args.outdir)
+        os.makedirs(args.outdir)
     except FileExistsError:
         pass
 
@@ -65,7 +65,7 @@ if __name__ == '__main__':
         dnn.compile(optimizer=config['optimizer'], loss=config['loss'])
         dnn.optimizer.lr.assign(config['lr'])
 
-    tf.keras.utils.plot_model(dnn, f'{args.outdir}/model.png', dpi=100, show_shapes=True, expand_nested=True)
+    tf.keras.utils.plot_model(dnn, os.path.join(args.outdir, 'model.png'), dpi=100, show_shapes=True, expand_nested=True)
 
     callbacks = get_callbacks(config['callbacks'])
 
@@ -74,13 +74,13 @@ if __name__ == '__main__':
     predictions = dnn.predict(test_ds, use_multiprocessing=True, workers=os.cpu_count()-1)
 
     # Save predictions and corresponding test files
-    with open(f'{args.outdir}/predictions.pkl', 'wb') as f:
+    with open(os.path.join(args.outdir, 'predictions.pkl'), 'wb') as f:
         pickle.dump((predictions, test_files), f)
 
     # Save training history
-    with open(f'{args.outdir}/history.pkl', 'wb') as f:
+    with open(os.path.join(args.outdir, 'history.pkl'), 'wb') as f:
         pickle.dump(fit.history, f)
 
     # Save model
     if args.save_model:
-        dnn.save(f'{args.outdir}/dnn')
+        dnn.save(os.path.join(args.outdir, 'dnn'))
