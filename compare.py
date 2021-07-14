@@ -5,6 +5,7 @@ import itertools
 import awkward as ak
 import numpy as np
 import pandas as pd
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 from src.data import read_nanoaod
 
@@ -95,30 +96,34 @@ def plot_distrs(dataframe, fig_dir):
             ),
             ha='right', va='bottom', transform=ax.transAxes
         )
+        ax.tick_params(
+            axis='both', which='both', direction='in', 
+            bottom=True, top=True, left=True, right=True
+        )
+
         fig.savefig(os.path.join(
             fig_dir, f'{flavour}_pt{ipt + 1}_eta{ieta + 1}.png'
         ))
         plt.close(fig)
 
 
-def bootstrap(x, num=30):
-    """Compute errors on median and IQR with bootstrapping."""
+def bootstrap_median(x, num=30):
+    """Compute errors on median with bootstrapping."""
 
     if len(x) == 0:
-        return np.nan, np.nan
+        return np.nan
 
-    medians, iqrs = [], []
+    medians = []
     for _ in range(num):
         x_resampled = np.random.choice(x, len(x))
         medians.append(np.median(x_resampled))
-        quantiles = np.percentile(x_resampled, [25, 75])
-        iqrs.append(quantiles[1] - quantiles[0])
-    return np.std(medians), np.std(iqrs)
+    return np.std(medians)
 
 
 def compare_flavours(dataframe, fig_dir):
     """Plot median response as a function of jet flavour."""
-
+    
+    pt_cut = 30
     for ieta, eta_bin in enumerate([(0, 2.5), (2.5, 5)], start=1):
         df_pteta = dataframe[
             (np.abs(dataframe.GenJet_eta) >= eta_bin[0])
@@ -131,25 +136,25 @@ def compare_flavours(dataframe, fig_dir):
         for _, pdg_ids in flavours:
             df = df_pteta[df_pteta.flavour.isin(pdg_ids)]
             ref_median.append(df.response.median())
-            ref_median_error.append(bootstrap(df.response)[0])
+            ref_median_error.append(bootstrap_median(df.response))
             ds_median.append(df.ds_response.median())
-            ds_median_error.append(bootstrap(df.ds_response)[0])
+            ds_median_error.append(bootstrap_median(df.ds_response))
             pn_median.append(df.pn_response.median())
-            pn_median_error.append(bootstrap(df.pn_response)[0])
+            pn_median_error.append(bootstrap_median(df.pn_response))
 
         fig = plt.figure()
         ax = fig.add_subplot()
         ax.errorbar(
             np.arange(len(flavours)) - 0.04, ref_median, yerr=ref_median_error,
-            marker='o', ms=2, lw=0, elinewidth=0.8, label='Standard'
+            marker='o', ms=3, lw=0, elinewidth=0.8, label='Standard'
         )
         ax.errorbar(
             np.arange(len(flavours)), ds_median, yerr=ds_median_error,
-            marker='o', ms=2, lw=0, elinewidth=0.8, label='Deep Sets'
+            marker='^', ms=3, lw=0, elinewidth=0.8, label='Deep Sets'
         )
         ax.errorbar(
             np.arange(len(flavours)) + 0.04, pn_median, yerr=pn_median_error,
-            marker='o', ms=2, lw=0, elinewidth=0.8, label='ParticleNet'
+            marker='s', ms=3, lw=0, elinewidth=0.8, label='ParticleNet'
         )
         ax.set_xlim(-0.5, len(flavours) - 0.5)
         ax.axhline(1, ls='dashed', lw=0.8, c='gray')
@@ -165,6 +170,11 @@ def compare_flavours(dataframe, fig_dir):
             ),
             ha='right', va='bottom', transform=ax.transAxes
         )
+        ax.tick_params(
+            axis='both', which='both', direction='in', 
+            bottom=True, top=True, left=True, right=True
+        )
+
         fig.savefig(os.path.join(fig_dir, f'eta{ieta}.png'))
         plt.close(fig)
 
@@ -175,17 +185,17 @@ def plot_median_response(outdir, flavour_label, bins, bin_centers, eta_bin, ieta
     ref_median = bins.response.median().to_numpy()
     ref_median_error = np.empty_like(ref_median)
     for i, (_, df) in enumerate(bins):
-        ref_median_error[i], _ = bootstrap(df.response.to_numpy())
+        ref_median_error[i] = bootstrap_median(df.response.to_numpy())
 
     ds_median = bins.ds_response.median().to_numpy()
     ds_median_error = np.empty_like(ref_median)
     for i, (_, df) in enumerate(bins):
-        ds_median_error[i], _ = bootstrap(df.ds_response.to_numpy())
+        ds_median_error[i] = bootstrap_median(df.ds_response.to_numpy())
 
     pn_median = bins.pn_response.median().to_numpy()
     pn_median_error = np.empty_like(ref_median)
     for i, (_, df) in enumerate(bins):
-        pn_median_error[i], _ = bootstrap(df.pn_response.to_numpy())
+        pn_median_error[i] = bootstrap_median(df.pn_response.to_numpy())
 
     fig = plt.figure()
     fig.suptitle('Median ' + flavour_label + '-jet response w.r.t. gen p$_{T}$')
@@ -195,11 +205,20 @@ def plot_median_response(outdir, flavour_label, bins, bin_centers, eta_bin, ieta
     vals = np.geomspace(0.5, 50, 20)
     shift = np.sqrt(vals[:-1] * vals[1:])
     
-    ax.errorbar(bin_centers - shift, ref_median, yerr=ref_median_error, ms=2, fmt='o', elinewidth=0.8, label='Standard')
-    ax.errorbar(bin_centers, ds_median, yerr=ds_median_error, ms=2, fmt='o', elinewidth=0.8, label='Deep Sets')
-    ax.errorbar(bin_centers + shift, pn_median, yerr=pn_median_error, ms=2, fmt='o', elinewidth=0.8, label='ParticleNet')
+    ax.errorbar(
+        bin_centers - shift, ref_median, yerr=ref_median_error,
+        ms=3, fmt='o', elinewidth=0.8, label='Standard'
+    )
+    ax.errorbar(
+        bin_centers, ds_median, yerr=ds_median_error, 
+        ms=3, fmt='^', elinewidth=0.8, label='Deep Sets'
+    )
+    ax.errorbar(
+        bin_centers + shift, pn_median, yerr=pn_median_error, 
+        ms=3, fmt='s', elinewidth=0.8, label='ParticleNet'
+    )
     ax.axhline(1, ls='dashed', c='gray', alpha=.7)
-    ax.set_xlabel('gen p$_{T}$')
+    ax.set_xlabel('$p^\\mathrm{{gen}}_{T}$')
     ax.set_ylabel('Median response')
     ax.text(
         1., 1.002,
@@ -210,9 +229,114 @@ def plot_median_response(outdir, flavour_label, bins, bin_centers, eta_bin, ieta
         ha='right', va='bottom', transform=ax.transAxes
     )
     ax.legend(loc='upper right')
+    ax.tick_params(
+        axis='both', which='both', direction='in', 
+        bottom=True, top=True, left=True, right=True
+    )
     ax.set_xscale('log')
 
-    fig.savefig(f'{outdir}/{flavour_label}_eta{ieta}.png')
+    fig.savefig(os.path.join(outdir, f'{flavour_label}_eta{ieta}.png'))
+    plt.close(fig)
+
+
+def bootstrap_iqr(x, num=30):
+    """Compute errors on IQR with bootstrapping."""
+
+    if len(x) == 0:
+        return np.nan
+
+    iqrs = []
+    for _ in range(num):
+        x_resampled = np.random.choice(x, len(x))
+        quantiles = np.percentile(x_resampled, [25, 75])
+        iqrs.append(quantiles[1] - quantiles[0])
+    return np.std(iqrs)
+
+
+def compute_iqr(groups):
+    """Compute IQR from series GroupBy."""
+    
+    q = groups.quantile([0.25, 0.75])
+    iqr = q[1::2].values - q[0::2].values
+
+    return iqr
+
+
+def plot_resolution(outdir, flavour_label, bins, bin_centers, eta_bin, ieta):
+    ref_median = bins.response.median().to_numpy()
+    ref_iqr = compute_iqr(bins.response)
+    ref_iqr_error = np.empty_like(ref_iqr)
+    for i, (_, df) in enumerate(bins):
+        ref_iqr_error[i] = bootstrap_iqr(df.response.to_numpy())
+
+    ds_median = bins.ds_response.median().to_numpy()
+    ds_iqr = compute_iqr(bins.ds_response)
+    ds_iqr_error = np.empty_like(ref_iqr)
+    for i, (_, df) in enumerate(bins):
+        ds_iqr_error[i] = bootstrap_iqr(df.ds_response.to_numpy())
+
+    pn_median = bins.pn_response.median().to_numpy()
+    pn_iqr = compute_iqr(bins.pn_response)
+    pn_iqr_error = np.empty_like(ref_iqr)
+    for i, (_, df) in enumerate(bins):
+        pn_iqr_error[i] = bootstrap_iqr(df.pn_response.to_numpy())
+
+    fig = plt.figure()
+    gs = mpl.gridspec.GridSpec(2, 1, hspace=0.02, height_ratios=[4, 1])
+    axes_upper = fig.add_subplot(gs[0, 0])
+    axes_lower = fig.add_subplot(gs[1, 0])
+
+    axes_upper.errorbar(
+        bin_centers, ref_iqr / ref_median, yerr=ref_iqr_error / ref_median,
+        ms=3, marker='o', lw=0, elinewidth=0.8, label='Standard'
+    )
+    axes_upper.errorbar(
+        bin_centers, ds_iqr / ds_median, yerr=ds_iqr_error / ds_median,
+        ms=3, marker='^', lw=0, elinewidth=0.8, label='Deep Sets'
+    )
+    axes_upper.errorbar(
+        bin_centers, pn_iqr / pn_median, yerr=pn_iqr_error / pn_median,
+        ms=3, marker='s', lw=0, elinewidth=0.8, label='ParticleNet'
+    )
+    axes_lower.plot(
+        bin_centers, (ds_iqr / ds_median) / (ref_iqr / ref_median),
+        ms=3, marker='^', lw=0, color='tab:orange'
+    )
+    axes_lower.plot(
+        bin_centers, (pn_iqr / pn_median) / (ref_iqr / ref_median),
+        ms=3, marker='s', lw=0, color='tab:green'
+    )
+
+    axes_upper.set_ylim(0, None)
+    axes_lower.set_ylim(0.85, 1.02)
+    for axes in [axes_upper, axes_lower]:
+        axes.set_xscale('log')
+        axes.set_xlim(binning[0], binning[-1])
+    axes_upper.xaxis.set_major_formatter(mpl.ticker.NullFormatter())
+    axes_upper.xaxis.set_minor_formatter(mpl.ticker.NullFormatter())
+    axes_upper.legend()
+    axes_upper.text(
+        1, 1.002,
+        '{}${:g} < |\\eta^\\mathrm{{gen}}| < {:g}$'.format(
+            f'${flavour_label}$, ' if flavour_label != 'all' else '',
+            eta_bin[0], eta_bin[1]
+        ),
+        ha='right', va='bottom', transform=axes_upper.transAxes
+    )
+    axes_upper.set_ylabel('IQR / median for response')
+    axes_lower.set_ylabel('Ratio')
+    axes_lower.set_xlabel(r'$p_\mathrm{T}^\mathrm{gen}$')
+    axes_upper.tick_params(
+        axis='both', which='both', direction='in', 
+        bottom=True, top=True, left=True, right=True
+    )
+    axes_lower.tick_params(
+        axis='both', which='both', direction='in', 
+        bottom=True, top=True, left=True, right=True
+    )
+    fig.align_ylabels()
+
+    fig.savefig(os.path.join(outdir, f'{flavour_label}_eta{ieta}_iqr.png'))
     plt.close(fig)
 
 
@@ -222,32 +346,32 @@ def plot_median_residual(outdir, bin_centers, flavour_labels, bins, eta_bin, iet
     ref_median_1 = bins[0].response.median().to_numpy()
     ref_median_error_1 = np.empty_like(ref_median_1)
     for i, (_, df) in enumerate(bins[0]):
-        ref_median_error_1[i], _ = bootstrap(df.response.to_numpy())
+        ref_median_error_1[i] = bootstrap_median(df.response.to_numpy())
 
     ds_median_1 = bins[0].ds_response.median().to_numpy()
     ds_median_error_1 = np.empty_like(ref_median_1)
     for i, (_, df) in enumerate(bins[0]):
-        ds_median_error_1[i], _ = bootstrap(df.ds_response.to_numpy())
+        ds_median_error_1[i] = bootstrap_median(df.ds_response.to_numpy())
 
     pn_median_1 = bins[0].pn_response.median().to_numpy()
     pn_median_error_1 = np.empty_like(ref_median_1)
     for i, (_, df) in enumerate(bins[0]):
-        pn_median_error_1[i], _ = bootstrap(df.pn_response.to_numpy())
+        pn_median_error_1[i] = bootstrap_median(df.pn_response.to_numpy())
     
     ref_median_2 = bins[1].response.median().to_numpy()
     ref_median_error_2 = np.empty_like(ref_median_2)
     for i, (_, df) in enumerate(bins[1]):
-        ref_median_error_2[i], _ = bootstrap(df.response.to_numpy())
+        ref_median_error_2[i] = bootstrap_median(df.response.to_numpy())
 
     ds_median_2 = bins[1].ds_response.median().to_numpy()
     ds_median_error_2 = np.empty_like(ref_median_2)
     for i, (_, df) in enumerate(bins[1]):
-        ds_median_error_2[i], _ = bootstrap(df.ds_response.to_numpy())
+        ds_median_error_2[i] = bootstrap_median(df.ds_response.to_numpy())
 
     pn_median_2 = bins[1].pn_response.median().to_numpy()
     pn_median_error_2 = np.empty_like(ref_median_2)
     for i, (_, df) in enumerate(bins[1]):
-        pn_median_error_2[i], _ = bootstrap(df.pn_response.to_numpy())
+        pn_median_error_2[i] = bootstrap_median(df.pn_response.to_numpy())
 
     diff = ref_median_1 - ref_median_2
     err = np.sqrt(ref_median_error_1 ** 2 + ref_median_error_2 ** 2)
@@ -266,19 +390,19 @@ def plot_median_residual(outdir, bin_centers, flavour_labels, bins, eta_bin, iet
 
     ax.errorbar(
         bin_centers - shift, diff, yerr=err, 
-        ms=2, fmt='o', elinewidth=0.8, label='Standard'
+        ms=3, fmt='o', elinewidth=0.8, label='Standard'
     )
     ax.errorbar(
         bin_centers, ds_diff, yerr=ds_err, 
-        ms=2, fmt='o', elinewidth=0.8, label='Deep Sets'
+        ms=3, fmt='^', elinewidth=0.8, label='Deep Sets'
     )
     ax.errorbar(
         bin_centers + shift, pn_diff, yerr=pn_err, 
-        ms=2, fmt='o', lw=0, elinewidth=0.8, label='ParticleNet'
+        ms=3, fmt='s', lw=0, elinewidth=0.8, label='ParticleNet'
     )
     ax.axhline(0, ls='dashed', c='gray', alpha=.7)
-    ax.set_xlabel('gen p$_{T}$')
-    ax.set_ylabel('R$_{' + flavour_labels[0] + '}$-R$_{' + flavour_labels[1] + '}$')
+    ax.set_xlabel('$p^\\mathrm{{gen}}_{T}$')
+    ax.set_ylabel('$R_{' + flavour_labels[0] + '}-R_{' + flavour_labels[1] + '}$')
     ax.text(
         1., 1.002,
         '${:g} < |\\eta^\\mathrm{{gen}}| < {:g}$'.format(eta_bin[0], eta_bin[1]),
@@ -286,8 +410,12 @@ def plot_median_residual(outdir, bin_centers, flavour_labels, bins, eta_bin, iet
     )
     ax.set_xscale('log')
     ax.legend(loc='upper right')
+    ax.tick_params(
+        axis='both', which='both', direction='in', 
+        bottom=True, top=True, left=True, right=True
+    )
 
-    fig.savefig(f'{outdir}/{flavour_labels[0]}-{flavour_labels[1]}_eta{ieta}.png')
+    fig.savefig(os.path.join(outdir, f'{flavour_labels[0]}-{flavour_labels[1]}_eta{ieta}.png'))
     plt.close(fig)
 
 
@@ -299,14 +427,14 @@ if __name__ == '__main__':
     args = arg_parser.parse_args()
 
     try:
-        os.mkdir(f'{args.outdir}')
+        os.mkdir(args.outdir)
     except FileExistsError:
         pass
 
-    with open(f'{args.deepsets}/predictions.pkl', 'rb') as f:
+    with open(os.path.join(args.deepsets, 'predictions.pkl'), 'rb') as f:
         ds_predictions, ds_test_files = pickle.load(f)
 
-    with open(f'{args.particlenet}/predictions.pkl', 'rb') as f:
+    with open(os.path.join(args.particlenet, 'predictions.pkl'), 'rb') as f:
         pn_predictions, pn_test_files = pickle.load(f)
 
     if pn_test_files != ds_test_files:
@@ -314,7 +442,7 @@ if __name__ == '__main__':
 
     df = read_data(ds_test_files, ds_predictions, pn_predictions)
 
-    for subdir in ['distributions', 'flavours', 'response', 'residual']:
+    for subdir in ['distributions', 'flavours', 'response', 'resolution', 'residual']:
         try:
             os.makedirs(os.path.join(args.outdir, subdir))
         except FileExistsError:
@@ -342,6 +470,11 @@ if __name__ == '__main__':
 
         plot_median_response(
             os.path.join(args.outdir, 'response'),
+            flavour_label, bins, bin_centers, eta_bin, ieta
+        )
+
+        plot_resolution(
+            os.path.join(args.outdir, 'resolution'),
             flavour_label, bins, bin_centers, eta_bin, ieta
         )
     
