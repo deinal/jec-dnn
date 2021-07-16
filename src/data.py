@@ -32,13 +32,14 @@ def create_datasets(net, indir, config):
     )
     
     metadata = _get_metadata(
-        config['features'], config['transforms']['categorical'], config['num_points']
+        config['features'], config['transforms']['categorical'], config['num_points'],
+        train_files, test_files, val_files, train.element_spec
     )
 
-    return train, val, test, test_files, metadata
+    return train, val, test, metadata
 
 
-def _get_metadata(features, category_map, num_points):
+def _get_metadata(features, category_map, num_points, train_files, test_files, val_files, element_spec):
     num_constituents = sum([
         len(features['pf']['numerical']),
         sum([
@@ -52,7 +53,15 @@ def _get_metadata(features, category_map, num_points):
         ])
     ])
 
-    return (num_constituents, num_globals, num_points)
+    return {
+        'num_constituents': num_constituents,
+        'num_globals': num_globals,
+        'num_points': num_points,
+        'train_files': train_files,
+        'test_files': test_files,
+        'val_files': val_files,
+        'element_spec': element_spec
+    }
 
 
 def _create_dataset(net, files, features, batch_size, num_points, transforms):
@@ -62,7 +71,7 @@ def _create_dataset(net, files, features, batch_size, num_points, transforms):
         lambda path: _retrieve_data(
             net, path, num_points, features['jet'], features['pf']
         ),
-        num_parallel_calls=4 # a fixed number instead of autotune limits the RAM usage
+        num_parallel_calls=tf.data.AUTOTUNE # a fixed number instead of autotune limits the RAM usage
     )
 
     tables = _create_category_tables(transforms['categorical'])
@@ -302,5 +311,8 @@ def read_nanoaod(path):
     selected_jets = leading_jets[(leading_jets.matched_gen.pt > 30) & (abs(leading_jets.matched_gen.eta) < 5)]
 
     valid_jets = selected_jets[~ak.is_none(selected_jets.matched_gen.pt)]
+
+    for field in ['dz', 'dzErr', 'd0', 'd0Err']:
+        valid_jets = valid_jets[ak.all(valid_jets.constituents.pf[field] != np.inf, axis=1)]
 
     return valid_jets

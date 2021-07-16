@@ -1,6 +1,6 @@
 net: deepset # deepset or particlenet
 
-epochs: 20
+epochs: 30
 shuffle_buffer: 64
 
 loss: mean_absolute_error
@@ -24,12 +24,13 @@ model:
     initializer: he_normal
     batch_norm: False
     dropout: 0
-    units: [256, 256, 256]
+    units: [512, 512, 512, 512, 512]
 
   particlenet:
     activation: relu
     initializer: he_normal
-    batch_norm: True
+    batch_norm: False
+    shortcut: False
     pooling: average # average or max
     num_points: 100
     K: 16
@@ -38,7 +39,7 @@ model:
       [128, 128, 128],
       [256, 256, 256]
     ]
-    dropout: 0.1
+    dropout: 0
     units: [256, 128, 64]
 
 data:
@@ -59,7 +60,7 @@ data:
       ]
     pf: 
       numerical: [
-        pt, eta, phi, d0, dz
+        pt, eta, phi, d0, dz, d0Err, dzErr, trkChi2, vtxChi2, puppiWeight, puppiWeightNoLep
       ]
       categorical: [
         charge, lostInnerHits, pdgId, pvAssocQuality, trkQuality

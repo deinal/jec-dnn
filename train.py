@@ -1,5 +1,6 @@
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+import glob
 import shutil
 import tensorflow as tf
 import argparse
@@ -34,6 +35,7 @@ if __name__ == '__main__':
     arg_parser.add_argument('-c', '--config', required=True, help='Config file')
     arg_parser.add_argument('--gpus', nargs='+', required=True, help='GPUs to run on in the form 0 1 etc.')
     arg_parser.add_argument('--save-model', action='store_true', help='If model should be saved')
+    arg_parser.add_argument('--unzip', action='store_true', help='Whether to unzip the input dataset or not')
     args = arg_parser.parse_args()
 
     os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(args.gpus)
@@ -50,17 +52,44 @@ if __name__ == '__main__':
 
     shutil.copyfile(args.config, f'{args.outdir}/config.yaml')
 
-    train_ds, val_ds, test_ds, test_files, metadata = create_datasets(net, args.indir, config['data'])
-    num_constituents, num_globals, num_points = metadata
+    if len(glob.glob(os.path.join(args.indir, '*.root'))):
+        train_ds, val_ds, test_ds, metadata = create_datasets(net, args.indir, config['data'])
+    else:
+        with open(f'{args.indir}/metadata.pkl', 'rb') as f:
+            metadata = pickle.load(f)
+
+        if args.unzip:
+            compression = 'GZIP'
+        else:
+            compression = None
+
+        train_ds = tf.data.experimental.load(
+            os.path.join(args.indir, 'train'),
+            element_spec=metadata['element_spec'], compression=compression
+        )
+        val_ds = tf.data.experimental.load(
+            os.path.join(args.indir, 'val'),
+            element_spec=metadata['element_spec'], compression=compression
+        )
+        test_ds = tf.data.experimental.load(
+            os.path.join(args.indir, 'test'),
+            element_spec=metadata['element_spec'], compression=compression
+        )
 
     train_ds = train_ds.shuffle(config['shuffle_buffer'])
 
     strategy = tf.distribute.MirroredStrategy()
     with strategy.scope():
         if net == 'deepset':
-            dnn = get_deepset(num_constituents, num_globals, config['model']['deepset'])
+            dnn = get_deepset(
+                metadata['num_constituents'], metadata['num_globals'], 
+                config['model']['deepset']
+            )
         if net == 'particlenet':
-            dnn = get_particle_net(num_constituents, num_points, num_globals, config['model']['particlenet'])
+            dnn = get_particle_net(
+                metadata['num_constituents'], metadata['num_points'], metadata['num_globals'], 
+                config['model']['particlenet']
+            )
 
         dnn.compile(optimizer=config['optimizer'], loss=config['loss'])
         dnn.optimizer.lr.assign(config['lr'])
@@ -75,7 +104,7 @@ if __name__ == '__main__':
 
     # Save predictions and corresponding test files
     with open(os.path.join(args.outdir, 'predictions.pkl'), 'wb') as f:
-        pickle.dump((predictions, test_files), f)
+        pickle.dump((predictions, metadata['test_files']), f)
 
     # Save training history
     with open(os.path.join(args.outdir, 'history.pkl'), 'wb') as f:
