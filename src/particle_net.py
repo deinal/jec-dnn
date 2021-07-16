@@ -4,7 +4,7 @@ from tensorflow.keras.layers import Activation, Add, BatchNormalization, Conv2D,
 from src.layers import Mean, Max, Expand, Squeeze
 
 
-def get_particle_net(num_constituents, num_points, num_globals, config):
+def get_particle_net(num_constituents, num_globals, num_points, config):
     """
     ParticleNet: Jet Tagging via Particle Clouds
     arxiv.org/abs/1902.08570
@@ -15,15 +15,15 @@ def get_particle_net(num_constituents, num_points, num_globals, config):
         The shapes of each input (`points`, `features`, `mask`).
     """
 
-    points = Input(name='points', shape=(num_points, 2))
     features = Input(name='features', shape=(num_points, num_constituents))
-    mask = Input(name='mask', shape=(num_points, 1))
-    coord_shift = Input(name='coord_shift', shape=(num_points, 1))
     globals = Input(name='globals', shape=(num_globals,))
+    points = Input(name='points', shape=(num_points, 2))
+    coord_shift = Input(name='coord_shift', shape=(num_points, 1))
+    mask = Input(name='mask', shape=(num_points, 1))
 
     outputs = _particle_net_base(points, features, mask, coord_shift, globals, config)
 
-    model = Model(inputs=[points, features, mask, coord_shift, globals], outputs=outputs)
+    model = Model(inputs=[features, globals, points, coord_shift, mask], outputs=outputs)
 
     model.summary()
 
@@ -51,7 +51,6 @@ def _particle_net_base(points, features, mask, coord_shift, globals, config):
 
     x = Concatenate(name='head')([pool, globals])
 
-    # x = pool
     for layer_idx, units in enumerate(config['units']):
         x = Dense(units)(x)
         x = Activation(config['activation'])(x)

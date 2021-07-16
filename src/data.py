@@ -18,53 +18,31 @@ def create_datasets(net, indir, config):
     test_files = root_paths[train_split:test_split]
     val_files = root_paths[test_split:]
 
-    train = _create_dataset(
-        net, train_files, config['features'], config['batch_size'], 
+    train_ds = _create_dataset(
+        net, train_files, config['features'],
         config['num_points'], config['transforms']
     )
-    test = _create_dataset(
-        net, test_files, config['features'], config['batch_size'], 
+    test_ds = _create_dataset(
+        net, test_files, config['features'],
         config['num_points'], config['transforms']
     )
-    val = _create_dataset(
-        net, val_files, config['features'], config['batch_size'], 
+    val_ds = _create_dataset(
+        net, val_files, config['features'],
         config['num_points'], config['transforms']
     )
     
-    metadata = _get_metadata(
-        config['features'], config['transforms']['categorical'], config['num_points'],
-        train_files, test_files, val_files, train.element_spec
-    )
-
-    return train, val, test, metadata
-
-
-def _get_metadata(features, category_map, num_points, train_files, test_files, val_files, element_spec):
-    num_constituents = sum([
-        len(features['pf']['numerical']),
-        sum([
-            len(category_map[f'pf_{field}']) for field in features['pf']['categorical']
-        ])
-    ])
-    num_globals = sum([
-        len(features['jet']['numerical']),
-        sum([
-            len(category_map[f'jet_{field}']) for field in features['jet']['categorical']
-        ])
-    ])
-
-    return {
-        'num_constituents': num_constituents,
-        'num_globals': num_globals,
-        'num_points': num_points,
+    metadata = {
         'train_files': train_files,
         'test_files': test_files,
         'val_files': val_files,
-        'element_spec': element_spec
+        'element_spec': train_ds.element_spec,
+        'num_points': config['num_points']
     }
 
+    return train_ds, val_ds, test_ds, metadata
 
-def _create_dataset(net, files, features, batch_size, num_points, transforms):
+
+def _create_dataset(net, files, features, num_points, transforms):
     dataset = tf.data.Dataset.from_tensor_slices(files)
 
     dataset = dataset.map(
@@ -77,17 +55,14 @@ def _create_dataset(net, files, features, batch_size, num_points, transforms):
     tables = _create_category_tables(transforms['categorical'])
 
     dataset = dataset.map(
-        lambda data, target: (_preprocess(
-                net, data, tables, transforms, features['jet'], features['pf'].copy()
+        lambda data, target: (
+            _preprocess(
+                net, data, tables, transforms, features['jet'], features['pf']
             ),
             target
         ),
         num_parallel_calls=tf.data.AUTOTUNE
     )
-
-    dataset = dataset.unbatch().batch(batch_size)
-
-    dataset = dataset.prefetch(tf.data.AUTOTUNE)
 
     return dataset
 
@@ -96,23 +71,20 @@ def _preprocess(net, data, tables, transforms, jet, pf):
     # Create synthetic features
     if 'rel_pt' in pf['synthetic']:
         data['pf_rel_pt'] = data['pf_pt'] / tf.expand_dims(data['jet_pt'], axis=1)
-        pf['numerical'] = list(filter(lambda field: field != 'pt', pf['numerical']))
 
     if 'rel_eta' in pf['synthetic']:
         jet_eta = tf.expand_dims(data['jet_eta'], axis=1)
         data['pf_rel_eta'] = (data['pf_eta'] - jet_eta) * tf.math.sign(jet_eta)
-        pf['numerical'] = list(filter(lambda field: field != 'eta', pf['numerical']))
 
     if 'rel_phi' in pf['synthetic']:
         phi_diff = data['pf_phi'] - tf.expand_dims(data['jet_phi'], axis=1)
         data['pf_rel_phi'] = (phi_diff + math.pi) % (2 * math.pi) - math.pi
-        pf['numerical'] = list(filter(lambda field: field != 'phi', pf['numerical']))
 
     # Create ParticleNet inputs
     if net == 'particlenet':
-        mask = tf.cast(tf.math.not_equal(data['pf_rel_eta'], 0), dtype=tf.float32) # 1 if valid
-        coord_shift = tf.multiply(1e6, tf.cast(tf.math.equal(mask, 0), dtype=tf.float32))
-        points = tf.concat([data['pf_rel_eta'], data['pf_rel_phi']], axis=2)
+        data['mask'] = tf.cast(tf.math.not_equal(data['pf_rel_eta'], 0), dtype=tf.float32) # 1 if valid
+        data['coord_shift'] = tf.multiply(1e6, tf.cast(tf.math.equal(data['mask'], 0), dtype=tf.float32))
+        data['points'] = tf.concat([data['pf_rel_eta'], data['pf_rel_phi']], axis=2)
 
     # Transform the data
     for name, transform in transforms['numerical'].items():
@@ -134,22 +106,7 @@ def _preprocess(net, data, tables, transforms, jet, pf):
             if name.startswith('pf'):
                 data[name] = tf.squeeze(encoded_feature, axis=2)
 
-    # Concatenate the data
-    globals = tf.concat(
-        [data[f'jet_{field}'] for field in jet['numerical'] + jet['categorical']], axis=1
-    )
-    constituents = tf.concat(
-        [data[f'pf_{field}'] for field in 
-        pf['numerical'] + pf['categorical'] + pf['synthetic']], axis=2
-    )
-    
-    # Mind the order of the inputs when constructing the model!
-    if net == 'deepset':
-        inputs = (constituents, globals)
-    if net == 'particlenet':
-        inputs = (points, constituents, mask, coord_shift, globals)
-
-    return inputs
+    return data
 
 
 def _one_hot_encode(feature, table, categories):
